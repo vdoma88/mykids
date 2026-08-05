@@ -1,0 +1,1466 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+
+:root{
+  --paper:#F5F3EE;
+  --paper-raised:#FFFFFF;
+  --ink:#242229;
+  --ink-soft:#6B6772;
+  --line:#E4E0D8;
+  --brand:#372E5C;
+  --brand-soft:#EDEAF6;
+  --m1:#DE8F2C; --m1-soft:#FBEBD3;
+  --m2:#2E9788; --m2-soft:#DCF0EC;
+  --m3:#D5637B; --m3-soft:#FBE1E6;
+  --m4:#8A6BD1; --m4-soft:#EBE3FA;
+  --ok:#3A8F5E;
+  --shadow: 0 1px 2px rgba(36,34,41,0.04), 0 8px 24px -12px rgba(36,34,41,0.18);
+}
+*{box-sizing:border-box;}
+.ukids-root{
+  font-family:'Inter',system-ui,sans-serif;
+  color:var(--ink);
+  background:var(--paper);
+  min-height:100%;
+  display:flex;
+  border-radius:16px;
+  overflow:hidden;
+  min-height:680px;
+  position:relative;
+}
+.ukids-root h1,.ukids-root h2,.ukids-root h3,.ukids-root .fr{
+  font-family:'Fraunces',serif;
+}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  width:250px; flex-shrink:0;
+  background:var(--brand);
+  color:#F2F0FA;
+  padding:22px 18px;
+  display:flex; flex-direction:column; gap:22px;
+}
+.brand-mark{display:flex;align-items:center;gap:10px;}
+.brand-mark .dot{width:10px;height:10px;border-radius:999px;background:#F2C879;}
+.brand-mark span{font-family:'Fraunces',serif; font-weight:700; font-size:19px; letter-spacing:0.2px;}
+.brand-sub{font-size:11.5px; color:#B7AEDB; margin-top:-16px; letter-spacing:.02em;}
+
+.profile-box{background:rgba(255,255,255,0.07); border-radius:12px; padding:12px;}
+.profile-box .lbl{font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:#B7AEDB; margin-bottom:8px;}
+.profile-chip{
+  display:flex; align-items:center; gap:9px; padding:8px 9px; border-radius:9px;
+  cursor:pointer; margin-bottom:4px; font-size:13.5px; color:#EDEAFB;
+  border:1px solid transparent;
+}
+.profile-chip:hover{background:rgba(255,255,255,0.06);}
+.profile-chip.active{background:#F2F0FA; color:var(--brand); font-weight:600;}
+.avatar{
+  width:26px;height:26px;border-radius:999px; flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif; font-weight:700; font-size:12px;
+  background:#F2C879; color:#3A2E17;
+}
+.profile-chip.active .avatar{background:var(--brand); color:#F2C879;}
+.add-child-btn{
+  width:100%; margin-top:6px; padding:7px; border-radius:8px; border:1px dashed #7F72B0;
+  background:transparent; color:#D9D3F0; font-size:12.5px; cursor:pointer; font-family:'Inter';
+}
+.add-child-btn:hover{background:rgba(255,255,255,0.06);}
+
+.nav{display:flex; flex-direction:column; gap:2px; margin-top:2px;}
+.nav-item{
+  display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px;
+  cursor:pointer; color:#D9D3F0; font-size:14px; font-weight:500;
+}
+.nav-item:hover{background:rgba(255,255,255,0.06);}
+.nav-item.active{background:rgba(255,255,255,0.14); color:#fff;}
+.nav-item svg{width:16px;height:16px; flex-shrink:0;}
+.sidebar-foot{margin-top:auto; font-size:11px; color:#8C82B8; line-height:1.5;}
+
+/* ---------- Main ---------- */
+.main{flex:1; overflow-y:auto; background:var(--paper);}
+.main-inner{padding:30px 34px 50px; max-width:980px;}
+.page-eyebrow{font-size:11.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); font-weight:600; margin-bottom:6px;}
+.page-title{font-size:27px; font-weight:600; margin:0 0 4px;}
+.page-desc{color:var(--ink-soft); font-size:14px; margin:0 0 26px; max-width:600px; line-height:1.55;}
+
+/* ---------- Trail ---------- */
+.trail{position:relative; padding-left:6px;}
+.trail-line{
+  position:absolute; left:29px; top:8px; bottom:8px; width:2px;
+  background:repeating-linear-gradient(to bottom, var(--line) 0 6px, transparent 6px 12px);
+}
+.station{position:relative; display:flex; gap:18px; padding-bottom:22px;}
+.station-num{
+  width:58px; height:58px; border-radius:999px; flex-shrink:0; z-index:1;
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+  background:var(--paper-raised); border:2px solid var(--line); box-shadow:var(--shadow);
+}
+.station-num .n{font-family:'Fraunces',serif; font-weight:700; font-size:19px; line-height:1;}
+.station-num .w{font-size:8.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; margin-top:1px;}
+.station.done .station-num{border-color:var(--ok);}
+.station-card{
+  flex:1; background:var(--paper-raised); border-radius:13px; border:1px solid var(--line);
+  box-shadow:var(--shadow); padding:16px 18px;
+}
+.station-module{display:inline-flex; align-items:center; gap:6px; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; font-weight:700; padding:3px 9px; border-radius:999px; margin-bottom:9px;}
+.sessions-row{display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;}
+.sess-btn{
+  flex:1; min-width:220px; text-align:left; border:1px solid var(--line); background:#FBFAF7;
+  border-radius:10px; padding:11px 13px; cursor:pointer; font-family:'Inter';
+}
+.sess-btn:hover{border-color:var(--brand); background:#F5F2FF;}
+.sess-btn .tag{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:700; display:flex; align-items:center; gap:6px;}
+.sess-btn .ttl{font-size:13.5px; margin-top:4px; line-height:1.4; color:var(--ink);}
+.check{width:15px;height:15px; border-radius:999px; background:var(--ok); display:inline-flex; align-items:center; justify-content:center;}
+.check svg{width:9px;height:9px; stroke:white; stroke-width:3;}
+
+/* ---------- Cards / generic ---------- */
+.card{background:var(--paper-raised); border:1px solid var(--line); border-radius:13px; padding:18px 20px; box-shadow:var(--shadow);}
+.btn{
+  border:none; border-radius:9px; padding:9px 16px; font-family:'Inter'; font-weight:600; font-size:13.5px;
+  cursor:pointer; background:var(--brand); color:#fff;
+}
+.btn:hover{opacity:.92;}
+.btn.ghost{background:transparent; color:var(--brand); border:1px solid var(--brand);}
+.btn.small{padding:6px 11px; font-size:12.5px;}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+input,textarea,select{
+  font-family:'Inter'; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13.5px;
+  background:#fff; color:var(--ink); width:100%;
+}
+textarea{resize:vertical; min-height:64px;}
+label.field-lbl{font-size:11.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:5px;}
+
+/* ---------- Modal ---------- */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(30,26,45,0.55); display:flex; align-items:flex-start;
+  justify-content:center; padding:26px; overflow-y:auto; z-index:50;
+}
+.modal{
+  background:var(--paper); border-radius:16px; max-width:700px; width:100%; box-shadow:0 24px 60px rgba(0,0,0,.35);
+  overflow:hidden;
+}
+.modal-head{padding:20px 24px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-start; gap:16px;}
+.modal-close{background:none;border:none;cursor:pointer;color:var(--ink-soft); font-size:20px; line-height:1; padding:4px;}
+.modal-body{padding:20px 24px 26px; display:flex; flex-direction:column; gap:20px;}
+
+/* ---------- Phase timeline ---------- */
+.phase-strip{display:flex; gap:4px; margin:2px 0 12px;}
+.phase-seg{flex:1; height:6px; border-radius:4px; background:var(--line);}
+.phase-seg.active{background:var(--brand);}
+.phase-seg.past{background:#B9AEDB;}
+.phase-now{display:flex; align-items:center; justify-content:space-between; background:var(--brand-soft); border-radius:11px; padding:14px 16px;}
+.phase-now .lbl{font-size:12px; color:var(--brand); font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+.phase-now .desc{font-size:13px; color:var(--ink-soft); margin-top:3px; max-width:340px;}
+.timer-display{font-family:'JetBrains Mono',monospace; font-size:30px; font-weight:600; color:var(--brand); min-width:82px; text-align:right;}
+.timer-controls{display:flex; gap:6px; margin-top:10px;}
+
+/* ---------- Exercise area ---------- */
+.exercise-box{border:1px dashed var(--line); border-radius:12px; padding:16px; background:#FBFAF7;}
+.exercise-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:10px;}
+
+/* schulte */
+.schulte-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:6px; max-width:280px; margin:0 auto;}
+.schulte-cell{aspect-ratio:1; border-radius:8px; background:#fff; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono'; font-weight:600; font-size:16px; cursor:pointer;}
+.schulte-cell.found{background:var(--ok); color:#fff; border-color:var(--ok);}
+.schulte-cell.next{box-shadow:0 0 0 2px var(--m2);}
+
+/* eisenhower */
+.eh-grid{display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:8px; min-height:220px;}
+.eh-quad{border-radius:10px; padding:9px; font-size:11px;}
+.eh-quad h4{margin:0 0 6px; font-size:11.5px;}
+.eh-item{background:rgba(255,255,255,0.7); border-radius:6px; padding:5px 7px; font-size:12px; margin-bottom:5px;}
+
+/* memory game */
+.mem-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; max-width:340px; margin:0 auto;}
+.mem-card{aspect-ratio:1; border-radius:9px; background:var(--brand); display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; color:transparent;}
+.mem-card.open{background:#fff; border:1px solid var(--line); color:var(--ink);}
+.mem-card.matched{background:var(--m2-soft); border:1px solid var(--m2); color:var(--ink); cursor:default;}
+
+/* misc chips */
+.pillrow{display:flex; gap:8px; flex-wrap:wrap;}
+.pill{padding:6px 12px; border-radius:999px; border:1px solid var(--line); font-size:12.5px; cursor:pointer; background:#fff;}
+.pill.sel{background:var(--brand); color:#fff; border-color:var(--brand);}
+.result-banner{border-radius:10px; padding:10px 13px; font-size:13px; font-weight:600;}
+.result-banner.good{background:#E4F3E9; color:var(--ok);}
+.result-banner.bad{background:#FBE7E9; color:#B8455B;}
+
+/* progress page */
+.stat-row{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:22px;}
+.stat-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:13px; padding:16px; box-shadow:var(--shadow);}
+.stat-card .num{font-family:'Fraunces',serif; font-size:28px; font-weight:700;}
+.stat-card .lbl{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin-top:2px;}
+.week-row{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;}
+.week-row:last-child{border-bottom:none;}
+.bar-track{flex:1; height:7px; background:var(--line); border-radius:4px; overflow:hidden;}
+.bar-fill{height:100%; background:var(--brand);}
+
+/* parent corner */
+.meeting-item{display:flex; gap:12px; align-items:flex-start; padding:13px 0; border-bottom:1px solid var(--line);}
+.meeting-item:last-child{border-bottom:none;}
+.meeting-check{width:22px;height:22px;border-radius:999px; border:2px solid var(--line); flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; margin-top:1px;}
+.meeting-check.done{background:var(--ok); border-color:var(--ok);}
+.meeting-check.done svg{width:11px;height:11px;stroke:#fff;stroke-width:3;}
+.meeting-title{font-weight:600; font-size:14px;}
+.meeting-tip{font-size:12.5px; color:var(--ink-soft); margin-top:3px; line-height:1.5;}
+
+/* empty state */
+.empty{text-align:center; padding:60px 20px; color:var(--ink-soft);}
+.empty h2{color:var(--ink); font-size:20px; margin-bottom:8px;}
+
+/* library grid */
+.lib-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.lib-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:12px; padding:14px 16px; cursor:pointer; box-shadow:var(--shadow);}
+.lib-card:hover{border-color:var(--brand);}
+.lib-card .num{font-family:'JetBrains Mono'; font-size:11px; color:var(--ink-soft);}
+.lib-card .ttl{font-weight:600; font-size:14px; margin-top:3px;}
+.lib-card .sub{font-size:12px; color:var(--ink-soft); margin-top:4px; line-height:1.45;}
+.lib-card.done-card{border-color:var(--ok);}
+
+/* profile edit icon */
+.profile-chip{position:relative;}
+.chip-edit{position:absolute; right:8px; top:8px; width:20px; height:20px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:inherit; opacity:.55; cursor:pointer;}
+.chip-edit:hover{opacity:1; background:rgba(0,0,0,0.08);}
+.chip-edit svg{width:12px;height:12px;}
+
+/* badges */
+.badge-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:22px;}
+.badge{width:104px; text-align:center; padding:14px 8px 10px; border-radius:13px; background:var(--paper-raised); border:1px solid var(--line); box-shadow:var(--shadow);}
+.badge.locked{opacity:.4;}
+.badge .badge-icon{width:44px;height:44px;border-radius:999px;margin:0 auto 8px; display:flex; align-items:center; justify-content:center; font-size:20px;}
+.badge .badge-lbl{font-size:11px; font-weight:600; line-height:1.3;}
+
+/* mood picker */
+.mood-row{display:flex; gap:8px;}
+.mood-opt{width:44px; height:44px; border-radius:12px; border:2px solid var(--line); background:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+.mood-opt.sel{border-color:var(--brand); background:var(--brand-soft);}
+
+/* journal entries */
+.journal-entry{border-bottom:1px solid var(--line); padding:14px 0;}
+.journal-entry:last-child{border-bottom:none;}
+.journal-entry .je-head{display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--ink-soft);}
+.journal-entry .je-body{font-size:13.5px; margin-top:6px; line-height:1.5;}
+.je-del{cursor:pointer; color:var(--ink-soft); font-size:12px; background:none; border:none;}
+.je-del:hover{color:#B8455B;}
+
+/* vision board */
+.vision-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.vision-card{border-radius:10px; padding:10px 12px; font-size:13px; background:#fff; border:1px solid var(--line);}
+.vision-card .cat{font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--brand);}
+
+/* habit tracker */
+.habit-table{width:100%; border-collapse:collapse; font-size:12px;}
+.habit-table th{font-weight:600; color:var(--ink-soft); padding:4px; text-align:center;}
+.habit-table td{padding:4px; text-align:center;}
+.habit-table td:first-child, .habit-table th:first-child{text-align:left; font-size:12.5px;}
+.habit-box{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line); cursor:pointer; margin:0 auto; background:#fff;}
+.habit-box.on{background:var(--ok); border-color:var(--ok);}
+
+/* values chips */
+.values-grid{display:flex; flex-wrap:wrap; gap:8px;}
+
+@media (max-width:720px){
+  .ukids-root{flex-direction:column;}
+  .sidebar{width:100%; flex-direction:row; align-items:center; overflow-x:auto;}
+  .lib-grid{grid-template-columns:1fr;}
+  .vision-grid{grid-template-columns:1fr;}
+  .eh-grid{grid-template-columns:1fr; grid-template-rows:repeat(4,auto);}
+  .stat-row{grid-template-columns:1fr;}
+}
+</style>
+
+<div class="ukids-root" id="ukidsRoot"></div>
+
+<script>
+(function(){
+
+const AVATAR_COLORS = ['#F2C879','#8FD1C6','#F0A9B8','#B6A7E8'];
+
+const MODULES = {
+  m1:{name:'Управление собой', color:'var(--m1)', soft:'var(--m1-soft)'},
+  m2:{name:'Мышление', color:'var(--m2)', soft:'var(--m2-soft)'},
+  m3:{name:'Эмоции и общение', color:'var(--m3)', soft:'var(--m3-soft)'},
+  m4:{name:'Команда и проект', color:'var(--m4)', soft:'var(--m4-soft)'}
+};
+
+const WEEKS = [
+  {n:1, mod:'m2', wd:'Знакомство и мозг: как устроено внимание и память', we:'Командообразование: правила группы, личные суперсилы', ex:'schulte', wdDesc:'Разбор того, как работает внимание и память, через игру-тренажёр на скорость поиска.', weDesc:'Ребята договариваются о правилах группы и находят свою «суперсилу» — сильную сторону характера.', parentTip:'Дома: спросите не «как дела в школе», а «что сегодня было интересным». Это открывает разговор лучше, чем общий вопрос.', weChecklist:['Договориться о 3 правилах группы','Каждый называет свою «суперсилу» — сильную черту характера','Обсудить в круге, как эти правила помогут дальше'], hint11:'Это игра на скорость: ищи цифры по порядку от 1 до 25 и старайся не отвлекаться.'},
+  {n:2, mod:'m1', wd:'Мотивация: хочу vs надо', we:'Практикум целеполагания на 3 месяца', ex:'smart', wdDesc:'Ищем личный интерес в учёбе и хобби, разбираем разницу между «надо» и «хочу».', weDesc:'Формулируем одну личную цель на ближайшие 3 месяца по методике SMART.', parentTip:'Спросите про цель ребёнка с любопытством, а не с проверкой — «расскажи, как думаешь этого добиться» вместо «а ты точно справишься».', weChecklist:['Сформулировать одну цель на 3 месяца по SMART','Обсудить в паре, что может помешать','Записать первый маленький шаг к цели'], hint11:'Подумай: чего ты хочешь сам(а), а не потому что «так надо»?'},
+  {n:3, mod:'m1', wd:'Тайм-менеджмент: где теряется время', we:'Симуляция «Мой идеальный день»', ex:'eisenhower', wdDesc:'Разбираем главных «пожирателей времени» и как с ними быть.', weDesc:'Составляем гибкий план идеального дня с учётом учёбы, отдыха и хобби.', parentTip:'Если подросток предложит свой план дня — дайте ему шанс попробовать сам, даже если план неидеален.', weChecklist:['Набросать распорядок идеального дня','Встроить туда учёбу, отдых и хобби','Сравнить план с реальным днём — что можно взять уже сейчас'], hint11:'Найди, на что уходит время зря — игры, соцсети — и подумай, что с этим делать.'},
+  {n:4, mod:'m3', wd:'Эмоциональный компас', we:'Тренинг «Антистресс»', ex:'breathing', wdDesc:'Учимся называть базовые эмоции и проживать их экологично, без подавления.', weDesc:'Отрабатываем техники саморегуляции перед контрольными и публичными выступлениями.', parentTip:'Если ребёнок злится или грустит — сначала назовите эмоцию вслух («вижу, ты расстроен»), а советы дайте только если он готов их слушать.', weChecklist:['Разобрать 2-3 сигнала стресса в теле','Потренировать дыхательную технику в паре','Придумать свой «сигнал SOS» перед контрольной'], hint11:'У каждой эмоции есть имя. Попробуй назвать, что ты чувствуешь прямо сейчас.'},
+  {n:5, mod:'m2', wd:'Критическое мышление: факты vs мнения', we:'Дебаты и разбор логических ошибок', ex:'facts', wdDesc:'Учимся отличать факты от мнений и оценочных суждений, замечать манипуляции.', weDesc:'Аргументируем свою точку зрения в мини-дебатах и ищем логические ошибки у оппонента.', parentTip:'Обсудите вместе новость или ролик из ленты — спросите «это факт или чьё-то мнение?».', weChecklist:['Выбрать позицию по теме дебатов','Подготовить 2 аргумента и 1 контраргумент сопернику','Провести мини-дебаты и разобрать логические ошибки'], hint11:'Факт можно проверить, а мнение — это чьё-то личное «я так думаю».'},
+  {n:6, mod:'m2', wd:'Мнемотехники: как запоминать больше', we:'Лаборатория памяти: слова через ассоциации', ex:'memory', wdDesc:'Осваиваем приёмы запоминания больших объёмов информации.', weDesc:'Тренируемся запоминать новые слова и термины через яркие ассоциации.', parentTip:'Похвалите не оценку, а сам приём запоминания — «классно, что ты придумал(а) такую ассоциацию».', weChecklist:['Выбрать 5 новых слов или терминов','Придумать яркую ассоциацию для каждого','Проверить друг друга в парах'], hint11:'Чтобы запомнить слово, придумай смешную картинку в голове — так легче.'},
+  {n:7, mod:'m3', wd:'Личные границы: как говорить «нет»', we:'Ролевая игра: сложные разговоры', ex:'istatement', wdDesc:'Учимся отстаивать границы без чувства вины через технику «Я-сообщений».', weDesc:'Проигрываем сложные разговоры с друзьями и взрослыми в безопасной обстановке.', parentTip:'Позвольте подростку сказать вам «нет» в мелочах — это тренирует ту же границу, которую он учится ставить со сверстниками.', weChecklist:['Выбрать сложную ситуацию из жизни','Проиграть её с помощью Я-сообщений','Обсудить, что получилось, а что было сложно'], hint11:'Можно вежливо сказать «нет» и не чувствовать себя виноватым.'},
+  {n:8, mod:'m3', wd:'Конфликтология', we:'Разбор кейсов: буллинг и давление', ex:'conflict', wdDesc:'Разбираем стратегии поведения в споре и способы снизить накал.', weDesc:'Разбираем реальные кейсы выхода из буллинга и давления сверстников.', parentTip:'Если подросток рассказал о конфликте — сначала выслушайте до конца, и только потом предлагайте решение.', weChecklist:['Разобрать реальный кейс травли или давления','Обсудить, к кому можно обратиться за помощью','Проговорить план действий на будущее'], hint11:'Спор — это нормально, но кричать не обязательно, можно договориться.'},
+  {n:9, mod:'m2', wd:'Креативность: карты мыслей', we:'Воркшоп «Генератор идей»', ex:'mindmap', wdDesc:'Осваиваем метод ментальных карт и приёмы латерального мышления.', weDesc:'Ищем решение реальной проблемы подростка через быстрый брейншторм идей.', parentTip:'Не оценивайте идеи ребёнка сразу как «хорошие» или «плохие» — сначала помогите накидать их как можно больше.', weChecklist:['Сформулировать реальную проблему подростка','Набросать 10 идей без критики','Выбрать 1-2 идеи для доработки'], hint11:'Не бойся придумывать даже странные идеи — потом выберем лучшие.'},
+  {n:10, mod:'m4', wd:'Публичные выступления', we:'Мини-TED: выступление на свободную тему', ex:'speech', wdDesc:'Разбираем структуру речи, работу с голосом и жестами, справляемся со страхом сцены.', weDesc:'Каждый готовит и произносит короткую речь на 2 минуты перед группой.', parentTip:'Попросите ребёнка порепетировать речь на вас дома — роль благодарного слушателя работает лучше, чем роль критика.', weChecklist:['Подготовить речь на 2 минуты','Выступить перед группой','Получить обратную связь по кругу'], hint11:'Перед выступлением можно потренироваться дома перед зеркалом.'},
+  {n:11, mod:'m4', wd:'Командная работа: роли в проекте', we:'Проектный спринт: концепт финала', ex:'roles', wdDesc:'Разбираем роли в команде и то, как распределять ответственность.', weDesc:'Команда собирает концепт финального проекта — социального, творческого или исследовательского.', parentTip:'Спросите, какая роль в команде ближе именно вашему ребёнку — это хороший повод узнать его сильные стороны.', weChecklist:['Распределить роли в команде','Набросать концепт финального проекта','Договориться, кто что делает до защиты'], hint11:'В команде у каждого своя роль — не обязательно быть лидером, чтобы быть важным.'},
+  {n:12, mod:'m4', wd:'Финал и защита проекта', we:'Итоги, сертификаты, рефлексия', ex:'certificate', wdDesc:'Презентация командных проектов перед родителями — итог всей программы.', weDesc:'Подводим итоги 12 недель, вручаем сертификаты, делимся рефлексией.', parentTip:'На финальной презентации важнее сам факт, что ребёнок вышел и рассказал о своей работе, а не идеальность результата.', weChecklist:['Представить финальный проект перед родителями','Получить сертификат об окончании программы','Поделиться главным выводом за 12 недель'], hint11:'Главное — не идеальный результат, а то, что ты попробовал(а) и дошёл(шла) до конца.'}
+];
+
+const BONUS_EXERCISES = [
+  {key:'values', num:'Б1', title:'Карта личных ценностей', desc:'Выбрать 5 главных ценностей из большого списка и понять, что действительно важно.'},
+  {key:'vision', num:'Б2', title:'Доска мечты', desc:'Собрать короткие цели-мечты по разным сферам жизни: учёба, спорт, творчество, отношения.'},
+  {key:'habit', num:'Б3', title:'Трекер полезных привычек', desc:'Отмечать по дням недели три маленькие привычки роста.'},
+  {key:'digital', num:'Б4', title:'Цифровой баланс', desc:'Спокойно посмотреть на то, сколько времени уходит на разные экранные активности.'},
+  {key:'decision', num:'Б5', title:'Матрица решений', desc:'Сравнить плюсы и минусы вариантов перед важным выбором.'},
+  {key:'negotiation', num:'Б6', title:'Переговоры win-win', desc:'Потренироваться искать решение, которое устраивает обе стороны.'},
+  {key:'pitch', num:'Б7', title:'Самопрезентация за 30 секунд', desc:'Собрать короткий рассказ о себе — кто я, чем увлекаюсь, что ищу.'}
+];
+
+const VALUES_LIST = ['Семья','Дружба','Честность','Творчество','Достижения','Приключения','Доброта','Независимость','Здоровье','Обучение','Веселье','Уважение','Смелость','Справедливость','Командность','Традиции'];
+
+const MOODS = ['😞','😐','🙂','😄','🤩'];
+
+const PARENT_MEETINGS = [
+  {t:'Возрастная психология 11–13', tip:'Что происходит с телом и мозгом подростка в этот период, и почему учебная мотивация естественно снижается.'},
+  {t:'Самостоятельность без гиперопеки', tip:'Как давать больше свободы и ответственности, не теряя контакта с подростком.'},
+  {t:'Мотивация без давления', tip:'Как говорить об учёбе и целях так, чтобы не вызывать сопротивление.'},
+  {t:'Границы и доверие', tip:'Что делать, если подросток стал закрытым — и как не разрушить доверие вопросами.'},
+  {t:'Буллинг и цифровая безопасность', tip:'Ранние признаки того, что ребёнка травят — офлайн или онлайн, и как аккуратно помочь.'},
+  {t:'Итоги программы', tip:'Как закрепить полученные навыки дома и поддержать подростка после окончания курса.'}
+];
+
+const PHASES_WD = [
+  {label:'Разминка', desc:'Нейрогимнастика, упражнения на переключение внимания и логику.', sec:600},
+  {label:'Интерактивный блок', desc:'Разбор темы через симуляцию, кейс или дискуссию.', sec:1500},
+  {label:'Перерыв', desc:'Физкульт-пауза.', sec:600},
+  {label:'Практика в группе', desc:'Ролевая игра, кейс или командная задача.', sec:1500},
+  {label:'Рефлексия', desc:'Шеринг: что получилось, как применить в жизни.', sec:600}
+];
+const PHASES_WE = [
+  {label:'Разминка и настрой', desc:'Короткое включение в практикум.', sec:600},
+  {label:'Основная практика', desc:'Ролевые игры, дебаты, командная работа над проектом.', sec:3600},
+  {label:'Рефлексия', desc:'Обсуждение результата и ощущений.', sec:600}
+];
+
+// ---------------- state ----------------
+let DATA = {children:[], activeChildId:null, progress:{}, parent:{}, bonus:{}, journal:{}};
+let VIEW = 'trail';
+let MODAL = null; // {week, kind:'wd'|'we'}
+let TIMER = null; // {phases, idx, remaining, running, intervalId}
+let PENDING_NOTES = '';
+let JOURNAL_MOOD = null;
+
+function uid(){return Math.random().toString(36).slice(2,9);}
+function fmtTime(s){const m=Math.floor(s/60); const sec=s%60; return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');}
+
+let AUDIO_CTX = null;
+function playChime(kind){
+  try{
+    if(!AUDIO_CTX) AUDIO_CTX = new (window.AudioContext||window.webkitAudioContext)();
+    const ctx = AUDIO_CTX;
+    const notes = kind==='done' ? [523.25,659.25,783.99] : [880,660];
+    notes.forEach((freq,i)=>{
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.type='sine'; osc.frequency.value=freq;
+      const start = ctx.currentTime + i*0.14;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.22, start+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start+0.32);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(start); osc.stop(start+0.34);
+    });
+  }catch(e){ /* audio not available, fail silently */ }
+}
+
+async function loadData(){
+  try{
+    const res = await window.storage.get('ukids-app-data');
+    if(res && res.value){ DATA = JSON.parse(res.value); }
+  }catch(e){ /* no data yet */ }
+  DATA.bonus = DATA.bonus || {};
+  DATA.journal = DATA.journal || {};
+  DATA.parent = DATA.parent || {};
+  if(!DATA.activeChildId && DATA.children.length){ DATA.activeChildId = DATA.children[0].id; }
+  render();
+}
+async function saveData(){
+  try{ await window.storage.set('ukids-app-data', JSON.stringify(DATA)); }
+  catch(e){ console.error('save failed', e); }
+}
+
+function getProgress(childId, week, kind){
+  DATA.progress[childId] = DATA.progress[childId] || {};
+  DATA.progress[childId][week] = DATA.progress[childId][week] || {};
+  DATA.progress[childId][week][kind] = DATA.progress[childId][week][kind] || {done:false, notes:'', data:{}};
+  return DATA.progress[childId][week][kind];
+}
+
+function activeChild(){ return DATA.children.find(c=>c.id===DATA.activeChildId); }
+
+function getBonusProgress(childId, key){
+  DATA.bonus[childId] = DATA.bonus[childId] || {};
+  DATA.bonus[childId][key] = DATA.bonus[childId][key] || {done:false, notes:'', data:{}};
+  return DATA.bonus[childId][key];
+}
+
+function getBadges(childId){
+  const modBadges = Object.keys(MODULES).map(modKey=>{
+    const weeksInMod = WEEKS.filter(w=>w.mod===modKey);
+    const complete = weeksInMod.every(w=>getProgress(childId,w.n,'wd').done && getProgress(childId,w.n,'we').done);
+    return {key:modKey, label:MODULES[modKey].name, color:MODULES[modKey].color, unlocked:complete, icon:'⬢'};
+  });
+  const bonusDone = BONUS_EXERCISES.every(b=>getBonusProgress(childId,b.key).done);
+  const certDone = getProgress(childId,12,'wd').done;
+  return [
+    ...modBadges,
+    {key:'bonus', label:'Полный набор доп. навыков', color:'var(--brand)', unlocked:bonusDone, icon:'🎒'},
+    {key:'cert', label:'Выпускник программы', color:'var(--ok)', unlocked:certDone, icon:'🏅'}
+  ];
+}
+
+// ---------------- render root ----------------
+function render(){
+  const root = document.getElementById('ukidsRoot');
+  root.innerHTML = renderSidebar() + '<div class="main"><div class="main-inner" id="mainInner"></div></div>' + (MODAL ? renderModalShell() : '');
+  document.getElementById('mainInner').innerHTML = renderMain();
+  attachGlobalHandlers();
+  if(MODAL) attachModalHandlers();
+  const importInput = document.getElementById('importFileInput');
+  if(importInput) importInput.onchange = handleImportFile;
+}
+
+function renderSidebar(){
+  const child = activeChild();
+  let chips = DATA.children.map((c,i)=>{
+    const initials = c.name.trim().slice(0,1).toUpperCase();
+    return `<div class="profile-chip ${c.id===DATA.activeChildId?'active':''}" data-action="switch-child" data-id="${c.id}">
+      <div class="avatar" style="${c.id!==DATA.activeChildId?('background:'+AVATAR_COLORS[i%4]+';color:#2A2333;'):''}">${initials}</div>
+      <div style="flex:1">${escapeHtml(c.name)}<div style="font-size:10.5px; opacity:.7; margin-top:-1px;">${c.age} лет</div></div>
+      <div class="chip-edit" data-action="edit-child" data-id="${c.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></div>
+    </div>`;
+  }).join('');
+
+  return `<div class="sidebar">
+    <div>
+      <div class="brand-mark"><div class="dot"></div><span>UKids Home</span></div>
+      <div class="brand-sub">soft skills · 11–13 лет</div>
+    </div>
+    <div class="profile-box">
+      <div class="lbl">Профили детей</div>
+      ${chips || '<div style="font-size:12.5px;color:#C9C2E6;">Пока нет профилей</div>'}
+      <button class="add-child-btn" data-action="add-child">+ Добавить ребёнка</button>
+    </div>
+    <div class="nav">
+      ${navItem('trail','Программа, 12 недель','M4 4h16v4H4zM4 10h10v4H4zM4 16h13v4H4z')}
+      ${navItem('library','Библиотека упражнений','M4 19V6a2 2 0 012-2h9l5 5v10a2 2 0 01-2 2H6a2 2 0 01-2-2z')}
+      ${navItem('bonus','Доп. навыки','M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4')}
+      ${navItem('journal','Дневник роста','M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}
+      ${navItem('progress','Прогресс и значки','M4 19h16M7 19v-6M12 19V9M17 19v-3')}
+      ${navItem('parent','Кабинет родителя','M12 12a4 4 0 100-8 4 4 0 000 8zM4 20c0-4 3.5-6 8-6s8 2 8 6')}
+    </div>
+    <div class="sidebar-foot">4 модуля · 12 недель · 24 занятия · 7 доп. навыков · дневник роста.</div>
+  </div>`;
+}
+function navItem(key,label,path){
+  return `<div class="nav-item ${VIEW===key?'active':''}" data-action="nav" data-view="${key}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="${path}"/></svg>
+    ${label}
+  </div>`;
+}
+
+function renderMain(){
+  if(!activeChild()) return renderEmptyState();
+  if(VIEW==='trail') return renderTrail();
+  if(VIEW==='library') return renderLibrary();
+  if(VIEW==='bonus') return renderBonusLibrary();
+  if(VIEW==='journal') return renderJournal();
+  if(VIEW==='progress') return renderProgress();
+  if(VIEW==='parent') return renderParent();
+  return '';
+}
+
+function renderEmptyState(){
+  return `<div class="empty">
+    <h2>Начнём с профиля ребёнка</h2>
+    <p style="max-width:380px;margin:0 auto 18px;">Создайте профиль подростка, чтобы открыть 12-недельную программу тренировки soft skills и когнитивных навыков.</p>
+    <button class="btn" data-action="add-child">Добавить ребёнка</button>
+  </div>`;
+}
+
+// ---------------- trail ----------------
+function renderTrail(){
+  const child = activeChild();
+  const stations = WEEKS.map(w=>{
+    const mod = MODULES[w.mod];
+    const pWd = getProgress(child.id, w.n, 'wd');
+    const pWe = getProgress(child.id, w.n, 'we');
+    const bothDone = pWd.done && pWe.done;
+    return `<div class="station ${bothDone?'done':''}">
+      <div class="station-num"><div class="n">${w.n}</div><div class="w">неделя</div></div>
+      <div class="station-card">
+        <span class="station-module" style="background:${mod.soft}; color:${mod.color};">${mod.name}</span>
+        <div class="sessions-row">
+          <div class="sess-btn" data-action="open-session" data-week="${w.n}" data-kind="wd">
+            <div class="tag">Занятие 1 · будни ${pWd.done?'<span class="check"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6"/></svg></span>':''}</div>
+            <div class="ttl">${w.wd}</div>
+          </div>
+          <div class="sess-btn" data-action="open-session" data-week="${w.n}" data-kind="we">
+            <div class="tag">Занятие 2 · выходные ${pWe.done?'<span class="check"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6"/></svg></span>':''}</div>
+            <div class="ttl">${w.we}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="page-eyebrow">Программа · ${escapeHtml(child.name)}, ${child.age} лет</div>
+  <h1 class="page-title">Маршрут на 12 недель</h1>
+  <p class="page-desc">Два занятия в неделю: будничное — теория и тренировка навыка, выходное — практикум и командная работа. Кликните на занятие, чтобы открыть таймер и упражнение.</p>
+  <div class="trail"><div class="trail-line"></div>${stations}</div>`;
+}
+
+// ---------------- library ----------------
+const EXERCISE_META = {
+  schulte:{title:'Таблица Шульте', num:'01'},
+  smart:{title:'Конструктор SMART-цели', num:'02'},
+  eisenhower:{title:'Матрица Эйзенхауэра', num:'03'},
+  breathing:{title:'Дыхание 4-7-8 против стресса', num:'04'},
+  facts:{title:'Факт или мнение?', num:'05'},
+  memory:{title:'Игра на ассоциации', num:'06'},
+  istatement:{title:'Конструктор Я-сообщения', num:'07'},
+  conflict:{title:'Разбор конфликтных ситуаций', num:'08'},
+  mindmap:{title:'Ментальная карта идей', num:'09'},
+  speech:{title:'Тренажёр речи', num:'10'},
+  roles:{title:'Тест на роль в команде', num:'11'},
+  certificate:{title:'Сертификат об окончании', num:'12'}
+};
+function renderLibrary(){
+  const cards = WEEKS.map(w=>{
+    const meta = EXERCISE_META[w.ex];
+    return `<div class="lib-card" data-action="open-session" data-week="${w.n}" data-kind="wd">
+      <div class="num mono">УПР. ${meta.num}</div>
+      <div class="ttl">${meta.title}</div>
+    </div>`;
+  }).join('');
+  return `<div class="page-eyebrow">Инструменты</div>
+  <h1 class="page-title">Библиотека упражнений</h1>
+  <p class="page-desc">Все интерактивные упражнения программы в одном месте — можно открывать отдельно от расписания.</p>
+  <div class="lib-grid">${cards}</div>
+  <p style="margin-top:18px;font-size:13px;color:var(--ink-soft);">Ищете больше? Загляните в <span data-action="nav" data-view="bonus" style="color:var(--brand);font-weight:600;cursor:pointer;">Доп. навыки</span> — ещё 7 инструментов сверх основной программы.</p>`;
+}
+
+// ---------------- bonus library ----------------
+function renderBonusLibrary(){
+  const child = activeChild();
+  const cards = BONUS_EXERCISES.map(b=>{
+    const prog = getBonusProgress(child.id, b.key);
+    return `<div class="lib-card ${prog.done?'done-card':''}" data-action="open-bonus" data-key="${b.key}">
+      <div class="num mono">${b.num}${prog.done?' · готово':''}</div>
+      <div class="ttl">${b.title}</div>
+      <div class="sub">${b.desc}</div>
+    </div>`;
+  }).join('');
+  return `<div class="page-eyebrow">Дополнительные навыки</div>
+  <h1 class="page-title">Расширенный набор для soft skills</h1>
+  <p class="page-desc">Семь коротких инструментов сверх основной программы — ценности, мечты, привычки, баланс с экраном, решения, переговоры и самопрезентация. Можно проходить в любом порядке.</p>
+  <div class="lib-grid">${cards}</div>`;
+}
+
+// ---------------- growth journal ----------------
+function renderJournal(){
+  const child = activeChild();
+  DATA.journal[child.id] = DATA.journal[child.id] || [];
+  const entries = DATA.journal[child.id];
+  const moodPicks = MOODS.map(m=>`<div class="mood-opt ${JOURNAL_MOOD===m?'sel':''}" data-action="pick-mood" data-mood="${m}">${m}</div>`).join('');
+  const list = entries.length ? entries.map(e=>`
+    <div class="journal-entry">
+      <div class="je-head"><span>${e.mood} · ${e.date}</span><button class="je-del" data-action="delete-journal" data-id="${e.id}">Удалить</button></div>
+      <div class="je-body">${e.grateful?('<b>Благодарен(на) за:</b> '+escapeHtml(e.grateful)+'<br/>'):''}${e.strength?('<b>Сильная сторона дня:</b> '+escapeHtml(e.strength)+'<br/>'):''}${e.win?('<b>Маленькая победа:</b> '+escapeHtml(e.win)):''}</div>
+    </div>`).join('') : '<p style="color:var(--ink-soft);font-size:13px;">Пока нет записей — заполните первую прямо сейчас.</p>';
+  return `<div class="page-eyebrow">Дневник роста · ${escapeHtml(child.name)}</div>
+  <h1 class="page-title">Как прошёл день</h1>
+  <p class="page-desc">Короткая ежедневная рефлексия закрепляет эмоциональный интеллект и помогает замечать свой прогресс — без оценок и «идеальных» дней.</p>
+  <div class="card" style="margin-bottom:18px;">
+    <label class="field-lbl">Настроение сегодня</label>
+    <div class="mood-row" id="moodRow" style="margin-bottom:14px;">${moodPicks}</div>
+    <label class="field-lbl">3 вещи, за которые я благодарен(на) сегодня</label>
+    <textarea id="jGrateful" style="margin-bottom:12px;" placeholder="Например: солнечная погода, вкусный обед, поддержка друга"></textarea>
+    <label class="field-lbl">Моя сильная сторона, которую я сегодня проявил(а)</label>
+    <input id="jStrength" style="margin-bottom:12px;" placeholder="Например: терпение, смелость, честность"/>
+    <label class="field-lbl">Маленькая победа дня</label>
+    <input id="jWin" style="margin-bottom:14px;" placeholder="Например: сам(а) разобрался(лась) с трудным заданием"/>
+    <button class="btn" data-action="save-journal">Сохранить запись</button>
+  </div>
+  <div class="card">${list}</div>`;
+}
+
+// ---------------- progress ----------------
+function renderProgress(){
+  const child = activeChild();
+  let doneCount=0, total=WEEKS.length*2;
+  const rows = WEEKS.map(w=>{
+    const pWd = getProgress(child.id, w.n, 'wd');
+    const pWe = getProgress(child.id, w.n, 'we');
+    let cnt=0; if(pWd.done)cnt++; if(pWe.done)cnt++;
+    doneCount+=cnt;
+    const pct = Math.round(cnt/2*100);
+    return `<div class="week-row">
+      <span class="mono" style="width:26px;color:var(--ink-soft);">${w.n}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <span style="width:70px;text-align:right;color:var(--ink-soft);font-size:12px;">${cnt}/2 занятий</span>
+    </div>`;
+  }).join('');
+  const pctTotal = Math.round(doneCount/total*100);
+  const badges = getBadges(child.id);
+  const badgeHtml = badges.map(b=>`<div class="badge ${b.unlocked?'':'locked'}">
+    <div class="badge-icon" style="background:${b.unlocked?b.color:'var(--line)'}; color:#fff;">${b.icon}</div>
+    <div class="badge-lbl">${b.label}</div>
+  </div>`).join('');
+
+  // notes feed: gather every non-empty note across weekday/weekend sessions and bonus exercises
+  const noteEntries = [];
+  WEEKS.forEach(w=>{
+    const pWd = getProgress(child.id, w.n, 'wd'); if(pWd.notes && pWd.notes.trim()) noteEntries.push({label:`Неделя ${w.n} · ${w.wd}`, text:pWd.notes});
+    const pWe = getProgress(child.id, w.n, 'we'); if(pWe.notes && pWe.notes.trim()) noteEntries.push({label:`Неделя ${w.n} · ${w.we}`, text:pWe.notes});
+  });
+  BONUS_EXERCISES.forEach(b=>{
+    const pb = getBonusProgress(child.id, b.key); if(pb.notes && pb.notes.trim()) noteEntries.push({label:`Доп. навык · ${b.title}`, text:pb.notes});
+  });
+  const notesHtml = noteEntries.length ? noteEntries.map(n=>`<div class="week-row" style="align-items:flex-start;">
+      <div style="flex:1;"><div style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:2px;">${escapeHtml(n.label)}</div><div style="font-size:13.5px;line-height:1.5;">${escapeHtml(n.text)}</div></div>
+    </div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Заметок пока нет — они появятся здесь после занятий и упражнений.</p>';
+
+  return `<div class="page-eyebrow">Прогресс · ${escapeHtml(child.name)}</div>
+  <h1 class="page-title">Как продвигается программа</h1>
+  <div class="stat-row">
+    <div class="stat-card"><div class="num">${doneCount}/${total}</div><div class="lbl">Занятий пройдено</div></div>
+    <div class="stat-card"><div class="num">${pctTotal}%</div><div class="lbl">Программа завершена</div></div>
+    <div class="stat-card"><div class="num">${WEEKS.filter(w=>getProgress(child.id,w.n,'wd').done && getProgress(child.id,w.n,'we').done).length}</div><div class="lbl">Недель закрыто полностью</div></div>
+  </div>
+  <div class="page-eyebrow" style="margin-top:4px;">Значки</div>
+  <div class="badge-row">${badgeHtml}</div>
+  <div class="card" style="margin-bottom:22px;">${rows}</div>
+  <div class="page-eyebrow">Все заметки</div>
+  <p class="page-desc">Рефлексия по занятиям и упражнениям в одной ленте.</p>
+  <div class="card" style="margin-bottom:22px;">${notesHtml}</div>
+  <div class="page-eyebrow">Резервная копия</div>
+  <p class="page-desc">Сохраните прогресс всех детей в файл — на случай смены устройства, или загрузите ранее сохранённый файл.</p>
+  <div class="card" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+    <button class="btn" data-action="export-data">Скачать резервную копию</button>
+    <button class="btn ghost" data-action="import-data">Загрузить из файла</button>
+    <input type="file" id="importFileInput" accept=".json" style="display:none;"/>
+  </div>`;
+}
+
+// ---------------- parent corner ----------------
+function renderParent(){
+  const child = activeChild();
+  DATA.parent[child.id] = DATA.parent[child.id] || {};
+  const items = PARENT_MEETINGS.map((m,i)=>{
+    const done = !!DATA.parent[child.id][i];
+    return `<div class="meeting-item">
+      <div class="meeting-check ${done?'done':''}" data-action="toggle-meeting" data-idx="${i}">
+        ${done?'<svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6"/></svg>':''}
+      </div>
+      <div>
+        <div class="meeting-title">Встреча ${i+1} (неделя ${i*2+1}–${i*2+2}) · ${m.t}</div>
+        <div class="meeting-tip">${m.tip}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const tips = WEEKS.map(w=>`<div class="week-row" style="align-items:flex-start;">
+      <span class="mono" style="width:26px;color:var(--ink-soft);padding-top:1px;">${w.n}</span>
+      <span style="font-size:13px;line-height:1.5;">${w.parentTip}</span>
+    </div>`).join('');
+  return `<div class="page-eyebrow">Parent Track</div>
+  <h1 class="page-title">Кабинет родителя</h1>
+  <p class="page-desc">Раз в две недели — короткая 30-минутная встреча с психологом: разбор возрастной психологии, поддержка самостоятельности и обратная связь по динамике ребёнка.</p>
+  <div class="card" style="margin-bottom:18px;">${items}</div>
+  <div class="page-eyebrow">Совет недели</div>
+  <p class="page-desc">Короткая практическая подсказка для дома на каждую из 12 недель программы.</p>
+  <div class="card">${tips}</div>`;
+}
+
+// ---------------- modal ----------------
+function renderModalShell(){ return `<div class="modal-overlay" id="modalOverlay"><div class="modal" id="modalBox"></div></div>`; }
+
+function renderModal(){
+  const {week, kind} = MODAL;
+  const w = WEEKS.find(x=>x.n===week);
+  const child = activeChild();
+  const prog = getProgress(child.id, week, kind);
+  const isWd = kind==='wd';
+  const phases = isWd ? PHASES_WD : PHASES_WE;
+  const title = isWd ? w.wd : w.we;
+  const desc = isWd ? w.wdDesc : w.weDesc;
+
+  if(!TIMER || TIMER.key !== week+'-'+kind){
+    TIMER = {key:week+'-'+kind, phases, idx:0, remaining:phases[0].sec, running:false, intervalId:null};
+  }
+  const seg = phases.map((p,i)=>`<div class="phase-seg ${i<TIMER.idx?'past':(i===TIMER.idx?'active':'')}"></div>`).join('');
+  const curPhase = phases[TIMER.idx];
+
+  const exerciseHtml = isWd ? renderExercise(w.ex, child.id, week) : renderWeekendPractice(w, child.id, week);
+
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <div class="page-eyebrow" style="margin-bottom:2px;">Неделя ${week} · ${isWd?'Занятие 1, будни':'Занятие 2, выходные'}</div>
+        <h2 class="fr" style="margin:0;font-size:19px;">${title}</h2>
+        <p style="margin:6px 0 0;font-size:13px;color:var(--ink-soft);max-width:460px;">${desc}</p>
+        ${(isWd && child.age==='11' && w.hint11) ? `<p style="margin:8px 0 0;font-size:12.5px;background:var(--m1-soft);color:#8A5A12;padding:7px 10px;border-radius:8px;max-width:460px;">Проще: ${w.hint11}</p>` : ''}
+      </div>
+      <button class="modal-close" data-action="close-modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="phase-strip">${seg}</div>
+        <div class="phase-now">
+          <div><div class="lbl">${curPhase.label}</div><div class="desc">${curPhase.desc}</div></div>
+          <div class="timer-display" id="timerDisplay">${fmtTime(TIMER.remaining)}</div>
+        </div>
+        <div class="timer-controls">
+          <button class="btn small" data-action="timer-toggle">${TIMER.running?'Пауза':'Старт'}</button>
+          <button class="btn small ghost" data-action="timer-next">Следующий этап</button>
+          <button class="btn small ghost" data-action="timer-reset">Сброс</button>
+        </div>
+      </div>
+      <div class="exercise-box">${exerciseHtml}</div>
+      <div>
+        <label class="field-lbl">Рефлексия / заметки тренера</label>
+        <textarea id="notesArea" placeholder="Что получилось, над чем ещё поработать...">${escapeHtml(prog.notes||'')}</textarea>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;">
+          <input type="checkbox" id="doneCheck" style="width:auto;" ${prog.done?'checked':''}/> Занятие пройдено
+        </label>
+        <button class="btn" data-action="save-session">Сохранить</button>
+      </div>
+    </div>`;
+  initExerciseBehavior(w.ex, child.id, week, isWd);
+}
+
+function renderWeekendPractice(w, childId, week){
+  const prog = getProgress(childId, week, 'we');
+  const items = w.weChecklist || ['Разминка и настрой группы','Основная практика','Общая рефлексия по кругу'];
+  prog.data.checklist = prog.data.checklist || items.map(()=>false);
+  const rows = items.map((it,i)=>`<label style="display:flex;align-items:center;gap:9px;font-size:13.5px;margin-bottom:8px;">
+    <input type="checkbox" class="we-check" data-i="${i}" style="width:auto;" ${prog.data.checklist[i]?'checked':''}/> ${it}
+  </label>`).join('');
+  return `<div class="exercise-title">Чек-лист практикума этой недели</div>${rows}
+  <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px;">Отмечайте пункты по ходу занятия — прогресс сохранится вместе с заметками.</div>`;
+}
+
+// ---------------- exercises ----------------
+function renderExercise(kind, childId, week){
+  const prog = getProgress(childId, week, 'wd');
+  prog.data = prog.data || {};
+  switch(kind){
+    case 'schulte': return `<div class="exercise-title">Таблица Шульте — найди цифры по порядку</div>
+      <div id="schulteWrap"><div id="schulteGrid" class="schulte-grid"></div>
+      <div style="text-align:center;margin-top:12px;"><span class="mono" id="schulteTime">00:00</span> · <button class="btn small ghost" data-action="schulte-restart">Новая таблица</button></div></div>`;
+    case 'smart': return `<div class="exercise-title">Собери свою SMART-цель</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${smartField('s','Конкретно — что именно я хочу сделать?', prog.data.s)}
+        ${smartField('m','Измеримо — как я пойму, что достиг цели?', prog.data.m)}
+        ${smartField('a','Достижимо — что мне для этого нужно?', prog.data.a)}
+        ${smartField('r','Важно — почему это важно именно мне?', prog.data.r)}
+        ${smartField('t','Срок — когда я хочу этого достичь?', prog.data.t)}
+      </div>
+      <div id="smartPreview" style="margin-top:12px;font-size:13px;background:#fff;border-radius:8px;padding:10px;border:1px solid var(--line);"></div>`;
+    case 'eisenhower': return `<div class="exercise-title">Матрица Эйзенхауэра</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="ehInput" placeholder="Введи задачу..." style="flex:1;"/>
+        <select id="ehQuad" style="width:170px;">
+          <option value="q1">Срочно и важно</option>
+          <option value="q2">Важно, не срочно</option>
+          <option value="q3">Срочно, не важно</option>
+          <option value="q4">Не срочно, не важно</option>
+        </select>
+        <button class="btn small" data-action="eh-add">+</button>
+      </div>
+      <div class="eh-grid">
+        <div class="eh-quad" style="background:#FBE1E6;"><h4>🔥 Срочно и важно</h4><div id="eh-q1"></div></div>
+        <div class="eh-quad" style="background:#DCF0EC;"><h4>🎯 Важно, не срочно</h4><div id="eh-q2"></div></div>
+        <div class="eh-quad" style="background:#FBEBD3;"><h4>⚡ Срочно, не важно</h4><div id="eh-q3"></div></div>
+        <div class="eh-quad" style="background:#EDEAF6;"><h4>🌙 Не срочно, не важно</h4><div id="eh-q4"></div></div>
+      </div>`;
+    case 'breathing': return `<div class="exercise-title">Дыхание 4–7–8</div>
+      <div style="text-align:center;">
+        <div id="breathCircle" style="width:130px;height:130px;border-radius:999px;background:var(--m3-soft);border:2px solid var(--m3);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--m3);transition:transform 1s linear;">Готов?</div>
+        <button class="btn small" data-action="breath-start">Начать цикл</button>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;max-width:320px;margin-left:auto;margin-right:auto;">Вдох на 4 счёта, задержка на 7, выдох на 8. Повторить 3–4 раза перед контрольной или выступлением.</p>
+      </div>`;
+    case 'facts': return `<div class="exercise-title">Факт, мнение или манипуляция?</div><div id="factsWrap"></div>`;
+    case 'memory': return `<div class="exercise-title">Найди пару по ассоциации</div>
+      <div class="mem-grid" id="memGrid"></div>
+      <div style="text-align:center;margin-top:10px;"><span class="mono" id="memMoves">Ходов: 0</span> · <button class="btn small ghost" data-action="mem-restart">Новая игра</button></div>`;
+    case 'istatement': return `<div class="exercise-title">Собери Я-сообщение</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${smartField('when','Когда...', prog.data.when, 'например: ты берёшь мои вещи без спроса')}
+        ${smartField('feel','Я чувствую...', prog.data.feel, 'например: раздражение')}
+        ${smartField('why','Потому что...', prog.data.why, 'например: мне важно, чтобы спрашивали')}
+        ${smartField('want','Мне бы хотелось...', prog.data.want, 'например: чтобы ты спрашивал(а) заранее')}
+      </div>
+      <div id="istatementPreview" style="margin-top:12px;font-size:13.5px;background:#fff;border-radius:8px;padding:12px;border:1px solid var(--line);font-style:italic;"></div>`;
+    case 'conflict': return `<div class="exercise-title">Как бы ты ответил(а)?</div><div id="conflictWrap"></div>`;
+    case 'mindmap': return `<div class="exercise-title">Ментальная карта</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input id="mmCenter" placeholder="Центральная тема" value="${escapeHtml((prog.data.center)||'')}" style="flex:1;"/>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="mmIdea" placeholder="Добавить идею..."/>
+        <button class="btn small" data-action="mm-add">+</button>
+      </div>
+      <div id="mmMap" style="position:relative;min-height:200px;"></div>`;
+    case 'speech': return `<div class="exercise-title">Структура короткой речи</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${smartField('hook','Крючок — как зацепить внимание в первые 10 секунд?', prog.data.hook)}
+        ${smartField('point','Главная мысль — что я хочу донести?', prog.data.point)}
+        ${smartField('story','История или пример', prog.data.story)}
+        ${smartField('close','Финал — как красиво закончить?', prog.data.close)}
+      </div>
+      <div style="margin-top:12px;text-align:center;">
+        <div class="timer-display" id="speechTimer" style="margin:0 auto 8px;">02:00</div>
+        <button class="btn small" data-action="speech-start">Тренировать 2 минуты</button>
+      </div>`;
+    case 'roles': return `<div class="exercise-title">Какая роль в команде тебе ближе?</div><div id="rolesWrap"></div>`;
+    case 'certificate': return `<div class="exercise-title">Сертификат об окончании программы</div>
+      <div id="certCard" style="text-align:center;padding:22px;background:#fff;border:2px solid var(--brand); border-radius:12px;">
+        <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);">UKids Home · сертификат</div>
+        <div class="fr" style="font-size:22px;margin:10px 0 4px;">${escapeHtml(activeChild()?activeChild().name:'')}</div>
+        <div style="font-size:13px;color:var(--ink-soft);">успешно завершил(а) 12-недельную программу<br/>развития soft skills и когнитивных навыков</div>
+        <div style="margin-top:14px;font-size:12px;color:var(--ink-soft);">${new Date().toLocaleDateString('ru-RU')}</div>
+      </div>
+      <div style="text-align:center;margin-top:12px;"><button class="btn small ghost" id="certDownload">Скачать как картинку</button></div>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">Отметьте занятие пройденным, чтобы зафиксировать финал программы.</p>`;
+    default: return '';
+  }
+}
+function smartField(key,label,val,placeholder){
+  return `<div><label class="field-lbl">${label}</label><input class="ex-field" data-key="${key}" value="${escapeHtml(val||'')}" placeholder="${placeholder||''}"/></div>`;
+}
+
+const FACT_ITEMS = [
+  {t:'Земля вращается вокруг Солнца.', a:'fact'},
+  {t:'Этот фильм — лучший из всех, что выходили в этом году.', a:'opinion'},
+  {t:'Все, кто носит такие кроссовки, выглядят круто.', a:'manip'},
+  {t:'В классе 27 учеников.', a:'fact'},
+  {t:'Если ты не купишь это сейчас, все будут смеяться над тобой.', a:'manip'},
+  {t:'Мне кажется, что математика интереснее физики.', a:'opinion'}
+];
+const CONFLICT_SCENARIOS = [
+  {t:'Одноклассник высмеял твой ответ у доски перед всеми.', opts:[
+    {t:'Ответить такой же шуткой в его адрес', good:false},
+    {t:'Спокойно сказать: «Мне не понравилась эта шутка»', good:true},
+    {t:'Промолчать и избегать его весь день', good:false}
+  ]},
+  {t:'Друг забыл про важную договорённость с тобой.', opts:[
+    {t:'Сразу обвинить его в безответственности', good:false},
+    {t:'Сказать, что почувствовал(а), и спросить, что случилось', good:true},
+    {t:'Написать гневное сообщение в чат', good:false}
+  ]}
+];
+const ROLE_QUIZ = [
+  {q:'На групповой работе тебе комфортнее всего:', opts:[
+    {t:'Предлагать новые идеи', role:'Генератор идей'},
+    {t:'Следить, чтобы всё было по плану и в срок', role:'Организатор'},
+    {t:'Поддерживать других и сглаживать споры', role:'Миротворец'},
+    {t:'Проверять детали и находить ошибки', role:'Аналитик'}
+  ]}
+];
+
+function initExerciseBehavior(kind, childId, week, isWd){
+  const prog = getProgress(childId, week, 'wd');
+  if(kind==='schulte') initSchulte();
+  if(kind==='smart') initSimpleFields('smartPreview', v=>`Моя цель: ${v.s||'…'}. Пойму, что достиг(ла), когда ${v.m||'…'}. Мне нужно: ${v.a||'…'}. Это важно, потому что ${v.r||'…'}. Срок: ${v.t||'…'}.`);
+  if(kind==='istatement') initSimpleFields('istatementPreview', v=>`«Когда ${v.when||'…'}, я чувствую ${v.feel||'…'}, потому что ${v.why||'…'}. Мне бы хотелось ${v.want||'…'}.»`);
+  if(kind==='eisenhower') initEisenhower(prog);
+  if(kind==='breathing') initBreathing();
+  if(kind==='facts') initFacts(prog);
+  if(kind==='memory') initMemory(prog);
+  if(kind==='conflict') initConflict(prog);
+  if(kind==='mindmap') initMindmap(prog);
+  if(kind==='speech') initSpeech();
+  if(kind==='roles') initRoles(prog);
+  if(kind==='certificate') initCertificate();
+
+  document.querySelectorAll('.ex-field').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ prog.data[inp.dataset.key] = inp.value; refreshPreview(); });
+  });
+}
+function refreshPreview(){
+  const {week} = MODAL; const child = activeChild(); const prog = getProgress(child.id, week, 'wd'); const w = WEEKS.find(x=>x.n===week);
+  if(w.ex==='smart' && document.getElementById('smartPreview')){
+    document.getElementById('smartPreview').textContent = `Моя цель: ${prog.data.s||'…'}. Пойму, что достиг(ла), когда ${prog.data.m||'…'}. Мне нужно: ${prog.data.a||'…'}. Это важно, потому что ${prog.data.r||'…'}. Срок: ${prog.data.t||'…'}.`;
+  }
+  if(w.ex==='istatement' && document.getElementById('istatementPreview')){
+    document.getElementById('istatementPreview').textContent = `«Когда ${prog.data.when||'…'}, я чувствую ${prog.data.feel||'…'}, потому что ${prog.data.why||'…'}. Мне бы хотелось ${prog.data.want||'…'}.»`;
+  }
+}
+function initSimpleFields(previewId, fn){
+  const {week} = MODAL; const child = activeChild(); const prog = getProgress(child.id, week, 'wd');
+  const el = document.getElementById(previewId); if(el) el.textContent = fn(prog.data);
+}
+
+// schulte
+function initSchulte(){
+  const grid = document.getElementById('schulteGrid'); if(!grid) return;
+  let nums = Array.from({length:25},(_,i)=>i+1);
+  for(let i=nums.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [nums[i],nums[j]]=[nums[j],nums[i]];}
+  let next=1, startTs=Date.now(), timerId=null, finished=false;
+  function paint(){
+    grid.innerHTML = nums.map(n=>`<div class="schulte-cell ${n<next?'found':''}" data-n="${n}">${n<next?'✓':n}</div>`).join('');
+    grid.querySelectorAll('.schulte-cell').forEach(cell=>{
+      cell.addEventListener('click', ()=>{
+        if(finished) return;
+        const n = parseInt(cell.dataset.n,10);
+        if(n===next){ next++; paint(); if(next>25){finished=true; clearInterval(timerId); playChime('done');} }
+      });
+    });
+  }
+  timerId = setInterval(()=>{ const t=document.getElementById('schulteTime'); if(t) t.textContent = fmtTime(Math.floor((Date.now()-startTs)/1000)); if(finished) clearInterval(timerId); }, 1000);
+  paint();
+  document.querySelector('[data-action="schulte-restart"]').onclick = ()=>{ clearInterval(timerId); initExerciseBehavior('schulte'); };
+}
+
+// eisenhower
+function initEisenhower(prog){
+  prog.data.eh = prog.data.eh || {q1:[],q2:[],q3:[],q4:[]};
+  function paint(){ ['q1','q2','q3','q4'].forEach(q=>{ document.getElementById('eh-'+q).innerHTML = prog.data.eh[q].map(t=>`<div class="eh-item">${escapeHtml(t)}</div>`).join(''); }); }
+  paint();
+  const addBtn = document.querySelector('[data-action="eh-add"]');
+  addBtn.onclick = ()=>{
+    const input = document.getElementById('ehInput'); const sel = document.getElementById('ehQuad');
+    if(!input.value.trim()) return;
+    prog.data.eh[sel.value].push(input.value.trim()); input.value=''; paint();
+  };
+}
+
+// breathing
+function initBreathing(){
+  const btn = document.querySelector('[data-action="breath-start"]'); const circle = document.getElementById('breathCircle');
+  let running=false;
+  btn.onclick = ()=>{
+    if(running) return; running=true;
+    const seq = [{l:'Вдох',s:4,scale:1.35},{l:'Задержка',s:7,scale:1.35},{l:'Выдох',s:8,scale:0.8}];
+    let i=0;
+    function step(){
+      if(i>=seq.length){ running=false; circle.textContent='Готово 🌿'; circle.style.transform='scale(1)'; playChime('done'); return; }
+      const cur = seq[i]; circle.textContent = cur.l+'… '+cur.s; circle.style.transform = 'scale('+cur.scale+')';
+      circle.style.transition = 'transform '+cur.s+'s linear';
+      setTimeout(()=>{ i++; step(); }, cur.s*1000);
+    }
+    step();
+  };
+}
+
+// facts
+function initFacts(prog){
+  prog.data.factsIdx = prog.data.factsIdx || 0; prog.data.factsScore = prog.data.factsScore||0;
+  const wrap = document.getElementById('factsWrap');
+  function paint(){
+    if(prog.data.factsIdx>=FACT_ITEMS.length){ wrap.innerHTML = `<div class="result-banner good">Готово! Верно: ${prog.data.factsScore} из ${FACT_ITEMS.length}. <button class="btn small ghost" style="margin-left:8px;" id="factsRestart">Ещё раз</button></div>`; document.getElementById('factsRestart').onclick=()=>{prog.data.factsIdx=0;prog.data.factsScore=0;paint();}; return; }
+    const item = FACT_ITEMS[prog.data.factsIdx];
+    wrap.innerHTML = `<p style="font-size:14px;margin-bottom:10px;">«${escapeHtml(item.t)}»</p>
+      <div class="pillrow">
+        <div class="pill" data-a="fact">Факт</div>
+        <div class="pill" data-a="opinion">Мнение</div>
+        <div class="pill" data-a="manip">Манипуляция</div>
+      </div><div id="factsFeedback" style="margin-top:10px;"></div>`;
+    wrap.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
+      const correct = p.dataset.a===item.a;
+      if(correct) prog.data.factsScore++;
+      document.getElementById('factsFeedback').innerHTML = `<div class="result-banner ${correct?'good':'bad'}">${correct?'Верно!':'Не совсем — это, скорее, '+labelFor(item.a)+'.'}</div>`;
+      setTimeout(()=>{ prog.data.factsIdx++; paint(); }, 1000);
+    });
+  }
+  function labelFor(a){ return a==='fact'?'факт':(a==='opinion'?'мнение':'манипуляция'); }
+  paint();
+}
+
+// memory
+function initMemory(prog){
+  const emojis = ['🧠','🎯','🔥','🌟','🧩','🚀'];
+  let deck = [...emojis, ...emojis];
+  for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]];}
+  let open=[], matched=new Set(), moves=0, lock=false;
+  const grid = document.getElementById('memGrid');
+  function paint(){
+    grid.innerHTML = deck.map((e,i)=>`<div class="mem-card ${matched.has(i)?'matched':(open.includes(i)?'open':'')}" data-i="${i}">${matched.has(i)||open.includes(i)?e:''}</div>`).join('');
+    document.getElementById('memMoves').textContent = 'Ходов: '+moves;
+    grid.querySelectorAll('.mem-card').forEach(c=>c.addEventListener('click',()=>{
+      const i = parseInt(c.dataset.i,10);
+      if(lock||matched.has(i)||open.includes(i)) return;
+      open.push(i); paint();
+      if(open.length===2){
+        moves++; lock=true;
+        setTimeout(()=>{
+          if(deck[open[0]]===deck[open[1]]){ open.forEach(x=>matched.add(x)); }
+          open=[]; lock=false; paint();
+        },600);
+      }
+    }));
+  }
+  paint();
+  const rb = document.querySelector('[data-action="mem-restart"]'); if(rb) rb.onclick = ()=>initExerciseBehavior('memory', null, null, true);
+}
+
+// conflict
+function initConflict(prog){
+  prog.data.confIdx = prog.data.confIdx||0;
+  const wrap = document.getElementById('conflictWrap');
+  function paint(){
+    if(prog.data.confIdx>=CONFLICT_SCENARIOS.length){ wrap.innerHTML = `<div class="result-banner good">Разобрали все ситуации. Отличная работа!</div>`; return; }
+    const sc = CONFLICT_SCENARIOS[prog.data.confIdx];
+    wrap.innerHTML = `<p style="font-size:14px;margin-bottom:10px;">${escapeHtml(sc.t)}</p>` + sc.opts.map((o,i)=>`<div class="pill" style="display:block;margin-bottom:7px;" data-i="${i}">${escapeHtml(o.t)}</div>`).join('') + `<div id="confFeedback" style="margin-top:8px;"></div>`;
+    wrap.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
+      const o = sc.opts[parseInt(p.dataset.i,10)];
+      document.getElementById('confFeedback').innerHTML = `<div class="result-banner ${o.good?'good':'bad'}">${o.good?'Хороший конструктивный ответ.':'Это может обострить конфликт — попробуй в следующий раз спокойнее.'}</div>`;
+      setTimeout(()=>{ prog.data.confIdx++; paint(); }, 1200);
+    });
+  }
+  paint();
+}
+
+// mindmap
+function initMindmap(prog){
+  prog.data.ideas = prog.data.ideas || [];
+  const centerInput = document.getElementById('mmCenter'); const mapEl = document.getElementById('mmMap');
+  centerInput.oninput = ()=>{ prog.data.center = centerInput.value; paint(); };
+  document.querySelector('[data-action="mm-add"]').onclick = ()=>{
+    const inp = document.getElementById('mmIdea'); if(!inp.value.trim()) return;
+    prog.data.ideas.push(inp.value.trim()); inp.value=''; paint();
+  };
+  function paint(){
+    const n = prog.data.ideas.length;
+    let html = `<div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:var(--brand); color:#fff; padding:10px 16px; border-radius:10px; font-weight:600; font-size:13px; z-index:2; max-width:140px; text-align:center;">${escapeHtml(prog.data.center||'Тема')}</div>`;
+    prog.data.ideas.forEach((idea,i)=>{
+      const angle = (i/(Math.max(n,1)))*2*Math.PI;
+      const x = 50 + 38*Math.cos(angle), y = 50 + 38*Math.sin(angle);
+      html += `<div style="position:absolute; left:${x}%; top:${y}%; transform:translate(-50%,-50%); background:#fff; border:1px solid var(--line); padding:6px 10px; border-radius:8px; font-size:12px; max-width:110px; text-align:center;">${escapeHtml(idea)}</div>`;
+    });
+    mapEl.innerHTML = html;
+  }
+  paint();
+}
+
+// speech
+function initSpeech(){
+  const disp = document.getElementById('speechTimer'); let remaining=120, id=null;
+  document.querySelector('[data-action="speech-start"]').onclick = (e)=>{
+    if(id) return; e.target.textContent='Идёт...';
+    id = setInterval(()=>{ remaining--; disp.textContent=fmtTime(Math.max(remaining,0)); if(remaining<=0){ clearInterval(id); id=null; e.target.textContent='Ещё раз'; remaining=120; playChime('done'); } },1000);
+  };
+}
+
+// roles
+function initRoles(prog){
+  const wrap = document.getElementById('rolesWrap');
+  wrap.innerHTML = ROLE_QUIZ[0].q + '<div style="margin-top:8px;">' + ROLE_QUIZ[0].opts.map((o,i)=>`<div class="pill" style="display:block;margin-bottom:7px;" data-i="${i}">${o.t}</div>`).join('') + '</div><div id="roleResult" style="margin-top:10px;"></div>';
+  wrap.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
+    const role = ROLE_QUIZ[0].opts[parseInt(p.dataset.i,10)].role;
+    prog.data.role = role;
+    document.getElementById('roleResult').innerHTML = `<div class="result-banner good">Похоже, тебе ближе роль: «${role}». В проекте это ценная и нужная функция!</div>`;
+  });
+}
+
+// ---------------- events ----------------
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function attachGlobalHandlers(){
+  document.querySelectorAll('[data-action]').forEach(el=>{
+    if(el.closest('#modalOverlay')) return; // handled separately
+    el.addEventListener('click', onAction);
+  });
+}
+function attachModalHandlers(){
+  renderModal();
+  document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay'){ closeModal(); } });
+  document.querySelectorAll('#modalOverlay [data-action]').forEach(el=> el.addEventListener('click', onAction));
+}
+
+function onAction(e){
+  const action = e.currentTarget.dataset.action;
+  if(action==='edit-child'){ e.stopPropagation(); openChildModal(e.currentTarget.dataset.id); return; }
+  if(action==='nav'){ VIEW = e.currentTarget.dataset.view; render(); }
+  else if(action==='switch-child'){ DATA.activeChildId = e.currentTarget.dataset.id; saveData(); render(); }
+  else if(action==='add-child'){ openChildModal(null); }
+  else if(action==='open-session'){ MODAL = {week:parseInt(e.currentTarget.dataset.week,10), kind:e.currentTarget.dataset.kind}; TIMER=null; render(); }
+  else if(action==='open-bonus'){ openBonusModal(e.currentTarget.dataset.key); }
+  else if(action==='close-modal'){ closeModal(); }
+  else if(action==='timer-toggle'){ toggleTimer(); }
+  else if(action==='timer-next'){ nextPhase(); }
+  else if(action==='timer-reset'){ resetTimer(); }
+  else if(action==='save-session'){ saveSession(); }
+  else if(action==='toggle-meeting'){ const child=activeChild(); const idx=e.currentTarget.dataset.idx; DATA.parent[child.id]=DATA.parent[child.id]||{}; DATA.parent[child.id][idx]=!DATA.parent[child.id][idx]; saveData(); render(); }
+  else if(action==='pick-mood'){ JOURNAL_MOOD = e.currentTarget.dataset.mood; document.querySelectorAll('.mood-opt').forEach(el=>el.classList.remove('sel')); e.currentTarget.classList.add('sel'); }
+  else if(action==='save-journal'){ saveJournalEntry(); }
+  else if(action==='delete-journal'){ const child=activeChild(); DATA.journal[child.id] = (DATA.journal[child.id]||[]).filter(x=>x.id!==e.currentTarget.dataset.id); saveData(); render(); }
+  else if(action==='export-data'){ exportBackup(); }
+  else if(action==='import-data'){ const inp=document.getElementById('importFileInput'); if(inp) inp.click(); }
+}
+
+function exportBackup(){
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ukids-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+function handleImportFile(e){
+  const file = e.target.files && e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!parsed || !Array.isArray(parsed.children)){ alert('Файл не похож на резервную копию UKids Home.'); return; }
+      if(!confirm('Загрузить эти данные? Текущий прогресс в приложении будет заменён.')) return;
+      DATA = parsed;
+      DATA.bonus = DATA.bonus || {}; DATA.journal = DATA.journal || {}; DATA.parent = DATA.parent || {}; DATA.progress = DATA.progress || {};
+      if(!DATA.activeChildId && DATA.children.length) DATA.activeChildId = DATA.children[0].id;
+      saveData(); render();
+    }catch(err){ alert('Не удалось прочитать файл — убедитесь, что это резервная копия UKids Home.'); }
+  };
+  reader.readAsText(file);
+}
+
+function saveJournalEntry(){
+  const child = activeChild();
+  const grateful = document.getElementById('jGrateful').value.trim();
+  const strength = document.getElementById('jStrength').value.trim();
+  const win = document.getElementById('jWin').value.trim();
+  if(!grateful && !strength && !win){ return; }
+  DATA.journal[child.id] = DATA.journal[child.id] || [];
+  DATA.journal[child.id].unshift({id:uid(), date:new Date().toLocaleDateString('ru-RU'), mood:JOURNAL_MOOD||'🙂', grateful, strength, win});
+  JOURNAL_MOOD = null;
+  saveData(); render();
+}
+
+function closeModal(){ if(TIMER && TIMER.intervalId) clearInterval(TIMER.intervalId); TIMER=null; MODAL=null; render(); }
+
+function toggleTimer(){
+  TIMER.running = !TIMER.running;
+  if(TIMER.running){
+    TIMER.intervalId = setInterval(()=>{
+      TIMER.remaining--;
+      const disp = document.getElementById('timerDisplay'); if(disp) disp.textContent = fmtTime(Math.max(TIMER.remaining,0));
+      if(TIMER.remaining<=0){ clearInterval(TIMER.intervalId); TIMER.running=false; playChime('phase'); nextPhase(); }
+    },1000);
+  } else { clearInterval(TIMER.intervalId); }
+  const btn = document.querySelector('[data-action="timer-toggle"]'); if(btn) btn.textContent = TIMER.running?'Пауза':'Старт';
+}
+function nextPhase(){
+  if(TIMER.intervalId) clearInterval(TIMER.intervalId);
+  TIMER.idx = Math.min(TIMER.idx+1, TIMER.phases.length-1);
+  TIMER.remaining = TIMER.phases[TIMER.idx].sec; TIMER.running=false;
+  renderModal(); document.querySelectorAll('#modalOverlay [data-action]').forEach(el=> el.addEventListener('click', onAction));
+}
+function resetTimer(){
+  if(TIMER.intervalId) clearInterval(TIMER.intervalId);
+  TIMER.idx=0; TIMER.remaining=TIMER.phases[0].sec; TIMER.running=false;
+  renderModal(); document.querySelectorAll('#modalOverlay [data-action]').forEach(el=> el.addEventListener('click', onAction));
+}
+
+function saveSession(){
+  const {week, kind} = MODAL; const child = activeChild();
+  const prog = getProgress(child.id, week, kind);
+  const notes = document.getElementById('notesArea'); if(notes) prog.notes = notes.value;
+  const doneCheck = document.getElementById('doneCheck'); if(doneCheck) prog.done = doneCheck.checked;
+  if(kind==='we'){
+    prog.data.checklist = prog.data.checklist || [false,false,false];
+    document.querySelectorAll('.we-check').forEach(c=>{ prog.data.checklist[parseInt(c.dataset.i,10)] = c.checked; });
+  }
+  saveData();
+  closeModal();
+}
+
+function openChildModal(existingId){
+  const existing = existingId ? DATA.children.find(c=>c.id===existingId) : null;
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='addChildOverlay';
+  overlay.innerHTML = `<div class="modal" style="max-width:380px;">
+    <div class="modal-head"><h2 class="fr" style="margin:0;font-size:18px;">${existing?'Профиль ребёнка':'Новый профиль'}</h2><button class="modal-close" id="acClose">&times;</button></div>
+    <div class="modal-body">
+      <div><label class="field-lbl">Имя ребёнка</label><input id="acName" placeholder="Например, Марк" value="${existing?escapeHtml(existing.name):''}"/></div>
+      <div><label class="field-lbl">Возраст</label><select id="acAge">
+        <option value="11" ${existing&&existing.age=='11'?'selected':''}>11</option>
+        <option value="12" ${existing&&existing.age=='12'?'selected':''}>12</option>
+        <option value="13" ${existing&&existing.age=='13'?'selected':''}>13</option>
+      </select></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="acSave" style="flex:1;">${existing?'Сохранить':'Создать профиль'}</button>
+        ${existing?'<button class="btn ghost" id="acDelete">Удалить</button>':''}
+      </div>
+    </div></div>`;
+  document.getElementById('ukidsRoot').appendChild(overlay);
+  document.getElementById('acClose').onclick = ()=>overlay.remove();
+  overlay.addEventListener('click',(e)=>{ if(e.target.id==='addChildOverlay') overlay.remove(); });
+  document.getElementById('acSave').onclick = ()=>{
+    const name = document.getElementById('acName').value.trim(); if(!name) return;
+    const age = document.getElementById('acAge').value;
+    if(existing){ existing.name = name; existing.age = age; }
+    else{ const id = uid(); DATA.children.push({id, name, age}); DATA.activeChildId = id; }
+    saveData(); overlay.remove(); render();
+  };
+  if(existing){
+    document.getElementById('acDelete').onclick = ()=>{
+      if(!confirm('Удалить профиль «'+existing.name+'» вместе со всем прогрессом? Это необратимо.')) return;
+      DATA.children = DATA.children.filter(c=>c.id!==existing.id);
+      delete DATA.progress[existing.id]; delete DATA.bonus[existing.id]; delete DATA.journal[existing.id]; delete DATA.parent[existing.id];
+      if(DATA.activeChildId===existing.id){ DATA.activeChildId = DATA.children.length ? DATA.children[0].id : null; }
+      saveData(); overlay.remove(); render();
+    };
+  }
+}
+
+// ---------------- bonus exercises modal ----------------
+const BONUS_META = {};
+BONUS_EXERCISES.forEach(b=>BONUS_META[b.key]=b);
+
+function openBonusModal(key){
+  const child = activeChild();
+  const meta = BONUS_META[key];
+  const prog = getBonusProgress(child.id, key);
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='bonusOverlay';
+  overlay.innerHTML = `<div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="page-eyebrow" style="margin-bottom:2px;">Доп. навык ${meta.num}</div>
+        <h2 class="fr" style="margin:0;font-size:19px;">${meta.title}</h2>
+        <p style="margin:6px 0 0;font-size:13px;color:var(--ink-soft);max-width:460px;">${meta.desc}</p>
+      </div>
+      <button class="modal-close" id="bxClose">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="exercise-box" id="bxExercise"></div>
+      <div>
+        <label class="field-lbl">Заметки</label>
+        <textarea id="bxNotes" placeholder="Что заметили, что обсудили...">${escapeHtml(prog.notes||'')}</textarea>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;">
+          <input type="checkbox" id="bxDone" style="width:auto;" ${prog.done?'checked':''}/> Упражнение пройдено
+        </label>
+        <button class="btn" id="bxSave">Сохранить</button>
+      </div>
+    </div></div>`;
+  document.getElementById('ukidsRoot').appendChild(overlay);
+  document.getElementById('bxExercise').innerHTML = renderBonusExercise(key, prog);
+  initBonusExerciseBehavior(key, prog);
+  document.getElementById('bxClose').onclick = ()=>overlay.remove();
+  overlay.addEventListener('click',(e)=>{ if(e.target.id==='bonusOverlay') overlay.remove(); });
+  document.getElementById('bxSave').onclick = ()=>{
+    prog.notes = document.getElementById('bxNotes').value;
+    prog.done = document.getElementById('bxDone').checked;
+    saveData(); overlay.remove(); render();
+  };
+}
+
+function renderBonusExercise(key, prog){
+  prog.data = prog.data || {};
+  switch(key){
+    case 'values': return `<div class="exercise-title">Выбери 5 самых важных ценностей</div>
+      <div class="values-grid" id="valuesGrid"></div>
+      <div style="margin-top:10px;font-size:12.5px;color:var(--ink-soft);" id="valuesCount">Выбрано: 0/5</div>`;
+    case 'vision': return `<div class="exercise-title">Доска мечты</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="visInput" placeholder="Короткая мечта или цель..."/>
+        <select id="visCat" style="width:150px;">
+          <option value="Учёба">Учёба</option><option value="Спорт">Спорт</option><option value="Творчество">Творчество</option><option value="Отношения">Отношения</option>
+        </select>
+        <button class="btn small" id="visAdd">+</button>
+      </div>
+      <div class="vision-grid" id="visGrid"></div>`;
+    case 'habit': return `<div class="exercise-title">Три привычки на неделю</div>
+      <table class="habit-table" id="habitTable"></table>
+      <div style="margin-top:8px;"><input id="habitCustom" placeholder="Своя привычка (необязательно)" value="${escapeHtml(prog.data.custom||'')}"/></div>`;
+    case 'digital': return `<div class="exercise-title">Сколько времени уходит на экран за обычный день</div>
+      <div id="digitalWrap" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <div id="digitalNote" style="margin-top:10px;font-size:12.5px;color:var(--ink-soft);"></div>`;
+    case 'decision': return `<div class="exercise-title">Сравни варианты</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="decInput" placeholder="Название варианта..."/>
+        <button class="btn small" id="decAdd">+</button>
+      </div>
+      <div id="decList"></div>`;
+    case 'negotiation': return `<div class="exercise-title">Найди win-win решение</div><div id="negoWrap"></div>`;
+    case 'pitch': return `<div class="exercise-title">Собери самопрезентацию</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${bxField('who','Кто я — коротко о себе', prog.data.who)}
+        ${bxField('into','Чем я увлекаюсь', prog.data.into)}
+        ${bxField('power','Моя суперсила', prog.data.power)}
+        ${bxField('goal','Что я сейчас ищу или хочу попробовать', prog.data.goal)}
+      </div>
+      <div id="pitchPreview" style="margin-top:12px;font-size:13.5px;background:#fff;border-radius:8px;padding:12px;border:1px solid var(--line);font-style:italic;"></div>
+      <div style="margin-top:10px;text-align:center;">
+        <div class="timer-display" id="pitchTimer" style="margin:0 auto 8px;">00:30</div>
+        <button class="btn small" id="pitchStart">Тренировать 30 секунд</button>
+      </div>`;
+    default: return '';
+  }
+}
+function bxField(key,label,val){ return `<div><label class="field-lbl">${label}</label><input class="bx-field" data-key="${key}" value="${escapeHtml(val||'')}"/></div>`; }
+
+const DECISION_DEFAULT = ()=>({options:[]});
+const NEGO_SCENARIOS = [
+  {t:'Ты хочешь пойти гулять с друзьями, а родители просят сначала доделать уроки.', opts:[
+    {t:'Настоять на своём и уйти без разговора', good:false},
+    {t:'Предложить: «Сделаю за час, а потом пойду», и договориться о времени', good:true},
+    {t:'Обидеться и отказаться от прогулки совсем', good:false}
+  ]},
+  {t:'Друг хочет смотреть один фильм, а ты — другой.', opts:[
+    {t:'Настоять на своём фильме', good:false},
+    {t:'Предложить посмотреть по очереди — сегодня твой, в другой раз его', good:true},
+    {t:'Промолчать и обидеться, что не спросили твоё мнение', good:false}
+  ]}
+];
+const DIGITAL_CATS = ['Соцсети','Игры','Учёба онлайн','Общение с друзьями'];
+
+function initBonusExerciseBehavior(key, prog){
+  if(key==='values'){
+    prog.data.selected = prog.data.selected || [];
+    const grid = document.getElementById('valuesGrid');
+    function paint(){
+      grid.innerHTML = VALUES_LIST.map(v=>`<div class="pill ${prog.data.selected.includes(v)?'sel':''}" data-v="${v}">${v}</div>`).join('');
+      document.getElementById('valuesCount').textContent = 'Выбрано: '+prog.data.selected.length+'/5';
+      grid.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
+        const v = p.dataset.v;
+        if(prog.data.selected.includes(v)){ prog.data.selected = prog.data.selected.filter(x=>x!==v); }
+        else if(prog.data.selected.length<5){ prog.data.selected.push(v); }
+        paint();
+      });
+    }
+    paint();
+  }
+  if(key==='vision'){
+    prog.data.items = prog.data.items || [];
+    const grid = document.getElementById('visGrid');
+    function paint(){ grid.innerHTML = prog.data.items.map(it=>`<div class="vision-card"><div class="cat">${it.cat}</div>${escapeHtml(it.t)}</div>`).join(''); }
+    document.getElementById('visAdd').onclick = ()=>{
+      const inp = document.getElementById('visInput'); const cat = document.getElementById('visCat').value;
+      if(!inp.value.trim()) return; prog.data.items.push({t:inp.value.trim(), cat}); inp.value=''; paint();
+    };
+    paint();
+  }
+  if(key==='habit'){
+    prog.data.habits = prog.data.habits || ['Сделал(а) домашку без напоминаний','Похвалил(а) себя за ошибку, а не поругал(а)','Сказал(а) «нет», когда не хотелось соглашаться'];
+    prog.data.grid = prog.data.grid || prog.data.habits.map(()=>[false,false,false,false,false,false,false]);
+    const days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    function paint(){
+      let html = '<tr><th></th>'+days.map(d=>`<th>${d}</th>`).join('')+'</tr>';
+      prog.data.habits.forEach((h,hi)=>{
+        html += `<tr><td>${escapeHtml(h)}</td>` + days.map((d,di)=>`<td><div class="habit-box ${prog.data.grid[hi][di]?'on':''}" data-h="${hi}" data-d="${di}"></div></td>`).join('') + '</tr>';
+      });
+      document.getElementById('habitTable').innerHTML = html;
+      document.querySelectorAll('.habit-box').forEach(b=>b.onclick=()=>{
+        const h=parseInt(b.dataset.h,10), d=parseInt(b.dataset.d,10);
+        prog.data.grid[h][d] = !prog.data.grid[h][d]; paint();
+      });
+    }
+    paint();
+    document.getElementById('habitCustom').oninput = (e)=>{ prog.data.custom = e.target.value; };
+  }
+  if(key==='digital'){
+    prog.data.hours = prog.data.hours || {};
+    const wrap = document.getElementById('digitalWrap');
+    wrap.innerHTML = DIGITAL_CATS.map(c=>`<div style="display:flex;align-items:center;gap:10px;">
+      <span style="flex:1;font-size:13px;">${c}</span>
+      <input type="number" min="0" max="12" step="0.5" style="width:80px;" class="dig-input" data-c="${c}" value="${prog.data.hours[c]||''}"/> <span style="font-size:12px;color:var(--ink-soft);">ч/день</span>
+    </div>`).join('');
+    function note(){
+      const total = DIGITAL_CATS.reduce((s,c)=>s+(parseFloat(prog.data.hours[c])||0),0);
+      const el = document.getElementById('digitalNote');
+      if(!total){ el.textContent=''; return; }
+      el.textContent = `Итого около ${total} ч в день перед экраном. Нет «правильной» цифры — важнее, совпадает ли она с тем, сколько времени хочется тратить на остальное.`;
+    }
+    wrap.querySelectorAll('.dig-input').forEach(inp=>inp.oninput=()=>{ prog.data.hours[inp.dataset.c]=inp.value; note(); });
+    note();
+  }
+  if(key==='decision'){
+    prog.data.options = prog.data.options || [];
+    const list = document.getElementById('decList');
+    function paint(){
+      list.innerHTML = prog.data.options.map((o,i)=>`<div class="card" style="margin-bottom:10px;padding:12px;">
+        <div style="font-weight:600;font-size:13.5px;margin-bottom:6px;">${escapeHtml(o.name)}</div>
+        <div style="display:flex;gap:8px;">
+          <textarea class="dec-pros" data-i="${i}" placeholder="Плюсы" style="min-height:50px;">${escapeHtml(o.pros||'')}</textarea>
+          <textarea class="dec-cons" data-i="${i}" placeholder="Минусы" style="min-height:50px;">${escapeHtml(o.cons||'')}</textarea>
+        </div>
+      </div>`).join('');
+      list.querySelectorAll('.dec-pros').forEach(t=>t.oninput=()=>{ prog.data.options[parseInt(t.dataset.i,10)].pros = t.value; });
+      list.querySelectorAll('.dec-cons').forEach(t=>t.oninput=()=>{ prog.data.options[parseInt(t.dataset.i,10)].cons = t.value; });
+    }
+    document.getElementById('decAdd').onclick = ()=>{
+      const inp = document.getElementById('decInput'); if(!inp.value.trim()) return;
+      prog.data.options.push({name:inp.value.trim(), pros:'', cons:''}); inp.value=''; paint();
+    };
+    paint();
+  }
+  if(key==='negotiation'){
+    prog.data.idx = prog.data.idx||0;
+    const wrap = document.getElementById('negoWrap');
+    function paint(){
+      if(prog.data.idx>=NEGO_SCENARIOS.length){ wrap.innerHTML = '<div class="result-banner good">Разобрали все ситуации — отличная тренировка переговоров!</div>'; return; }
+      const sc = NEGO_SCENARIOS[prog.data.idx];
+      wrap.innerHTML = `<p style="font-size:14px;margin-bottom:10px;">${escapeHtml(sc.t)}</p>` + sc.opts.map((o,i)=>`<div class="pill" style="display:block;margin-bottom:7px;" data-i="${i}">${escapeHtml(o.t)}</div>`).join('') + '<div id="negoFeedback" style="margin-top:8px;"></div>';
+      wrap.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{
+        const o = sc.opts[parseInt(p.dataset.i,10)];
+        document.getElementById('negoFeedback').innerHTML = `<div class="result-banner ${o.good?'good':'bad'}">${o.good?'Отличный win-win вариант!':'Такой ответ обычно устраивает только одну сторону — поищи компромисс.'}</div>`;
+        setTimeout(()=>{ prog.data.idx++; paint(); }, 1200);
+      });
+    }
+    paint();
+  }
+  if(key==='pitch'){
+    function preview(){
+      document.getElementById('pitchPreview').textContent = `«Привет, я ${prog.data.who||'…'}. Увлекаюсь ${prog.data.into||'…'}. Моя суперсила — ${prog.data.power||'…'}. Сейчас я ищу ${prog.data.goal||'…'}.»`;
+    }
+    document.querySelectorAll('.bx-field').forEach(inp=>inp.addEventListener('input',()=>{ prog.data[inp.dataset.key]=inp.value; preview(); }));
+    preview();
+    let remaining=30, id=null;
+    document.getElementById('pitchStart').onclick = (e)=>{
+      if(id) return; e.target.textContent='Идёт...';
+      const disp = document.getElementById('pitchTimer');
+      id = setInterval(()=>{ remaining--; disp.textContent=fmtTime(Math.max(remaining,0)); if(remaining<=0){ clearInterval(id); id=null; e.target.textContent='Ещё раз'; remaining=30; playChime('done'); } },1000);
+    };
+  }
+}
+
+// certificate
+function initCertificate(){
+  const btn = document.getElementById('certDownload'); if(!btn) return;
+  btn.onclick = ()=>{
+    const child = activeChild();
+    const canvas = document.createElement('canvas');
+    canvas.width = 1000; canvas.height = 680;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#F5F3EE'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle = '#372E5C'; ctx.lineWidth = 10; ctx.strokeRect(24,24,canvas.width-48,canvas.height-48);
+    ctx.strokeStyle = '#DE8F2C'; ctx.lineWidth = 2; ctx.strokeRect(42,42,canvas.width-84,canvas.height-84);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#6B6772'; ctx.font = '600 20px Inter, sans-serif';
+    ctx.fillText('U K I D S   H O M E   ·   С Е Р Т И Ф И К А Т', canvas.width/2, 150);
+    ctx.fillStyle = '#242229'; ctx.font = '700 58px Georgia, serif';
+    ctx.fillText(child?child.name:'', canvas.width/2, 260);
+    ctx.fillStyle = '#372E5C'; ctx.font = '400 24px Inter, sans-serif';
+    wrapText(ctx, 'успешно завершил(а) 12-недельную программу развития soft skills и когнитивных навыков', canvas.width/2, 340, 700, 34);
+    ctx.fillStyle = '#6B6772'; ctx.font = '400 18px Inter, sans-serif';
+    ctx.fillText(new Date().toLocaleDateString('ru-RU'), canvas.width/2, 560);
+    ctx.font = '600 16px Inter, sans-serif'; ctx.fillStyle = '#DE8F2C';
+    ctx.fillText('4 модуля · 24 занятия · путь длиной в 12 недель', canvas.width/2, 600);
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a'); a.href = url; a.download = 'sertifikat-'+(child?child.name.replace(/\s+/g,'_'):'ukids')+'.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    playChime('done');
+  };
+}
+function wrapText(ctx, text, x, y, maxWidth, lineHeight){
+  const words = text.split(' '); let line=''; let curY=y;
+  words.forEach(word=>{
+    const test = line + word + ' ';
+    if(ctx.measureText(test).width > maxWidth && line){ ctx.fillText(line, x, curY); line = word+' '; curY += lineHeight; }
+    else{ line = test; }
+  });
+  ctx.fillText(line, x, curY);
+}
+
+loadData();
+})();
+</script>
