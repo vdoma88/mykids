@@ -27,6 +27,7 @@ jobs:
       - name: Сгенерированный контент актуален
         run: |
           node packages/content-tools/bin/import-ukids.js
+          node packages/content-tools/bin/build-index.js
           # --porcelain, а не diff: он видит и новые, и удалённые файлы
           if [ -n "$(git status --porcelain -- content/)" ]; then
             echo "::error::content/ расходится с legacy/ukids-app.html — перегенерируйте: npm run import:ukids"
@@ -52,14 +53,20 @@ jobs:
         run: npm test
 
   legacy:
-    name: Legacy-приложение
+    name: Браузерные тесты
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install playwright@1.62.1 --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - name: Дымовой тест
+      - name: Дымовой тест legacy
         run: node legacy/smoke-test.js
+
+      - name: Сборка раннера
+        run: npm run build -w @mykids/task-runner
+
+      - name: Дымовой тест раннера
+        run: node packages/task-runner/smoke-test.mjs

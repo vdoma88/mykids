@@ -13,12 +13,16 @@
     "import:ukids": "node packages/content-tools/bin/import-ukids.js",
     "test:legacy": "node legacy/smoke-test.js",
     "test": "vitest run",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "dev:runner": "npm run dev -w @mykids/task-runner",
+    "content:index": "node packages/content-tools/bin/build-index.js"
   },
   "devDependencies": {
     "playwright": "^1.62.1",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "esbuild": "^0.24.2"
   },
   "engines": {
     "node": ">=22"

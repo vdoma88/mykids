@@ -37,6 +37,10 @@ function checkPack(packDir) {
   const warnings = [];
   const itemIds = new Map();
 
+  if (!fs.existsSync(packDir) || !fs.statSync(packDir).isDirectory()) {
+    return { errors: [], warnings, itemIds, skipped: true };
+  }
+
   const manifestPath = path.join(packDir, 'pack.json');
   if (!fs.existsSync(manifestPath)) {
     return { errors: ['нет pack.json'], warnings, itemIds };
@@ -88,7 +92,9 @@ function checkPack(packDir) {
       itemIds.set(item.id, rel);
     }
 
-    errors.push(...checkItemSemantics(item, rel, packDir));
+    const semantics = checkItemSemantics(item, rel, packDir);
+    errors.push(...semantics.errors);
+    warnings.push(...semantics.warnings);
   }
 
   // Файлы в items/, забытые в манифесте, иначе тихо не попадут в выдачу.
@@ -109,6 +115,7 @@ function checkPack(packDir) {
 /** Правила корректности ответов, которые JSON Schema не выражает. */
 function checkItemSemantics(item, rel, packDir) {
   const errors = [];
+  const warnings = [];
 
   if (item.type === 'single_choice') {
     const correct = item.options.filter(o => o.correct).length;
@@ -140,10 +147,18 @@ function checkItemSemantics(item, rel, packDir) {
       errors.push(`${rel}: у short_text нужен либо accepted, либо pattern`);
     }
     if (pattern) {
+      // Флаг u — как в раннере: под ним часть некорректных экранирований падает
+      // сразу, а не молча меняет смысл проверки ответа.
       try {
-        new RegExp(pattern);
+        new RegExp(pattern, 'u');
       } catch (e) {
         errors.push(`${rel}: некорректный regex в answer.pattern — ${e.message}`);
+      }
+      if (/\\w/.test(pattern)) {
+        warnings.push(
+          `${rel}: в answer.pattern есть \\w — он не покрывает кириллицу, ` +
+          `для русских ответов нужен \\p{L}`
+        );
       }
     }
   }
@@ -178,7 +193,7 @@ function checkItemSemantics(item, rel, packDir) {
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 function main() {
@@ -191,11 +206,13 @@ function main() {
   const globalIds = new Map();
   let totalErrors = 0;
   let totalWarnings = 0;
+  let checked = 0;
 
   for (const target of targets) {
     const packDir = path.resolve(target);
     const name = path.basename(packDir);
-    const { errors, warnings, itemIds } = checkPack(packDir);
+    const { errors, warnings, itemIds, skipped } = checkPack(packDir);
+    if (skipped) continue;
 
     // id заданий уникальны не только внутри пакета, но и по всему репозиторию:
     // журнал попыток ссылается на них глобально.
@@ -213,12 +230,13 @@ function main() {
       console.log(`  ok    ${name} — заданий: ${itemIds.size}`);
     }
 
+    checked++;
     totalErrors += errors.length;
     totalWarnings += warnings.length;
   }
 
   console.log(
-    `\nПакетов: ${targets.length}, заданий: ${globalIds.size}, ` +
+    `\nПакетов: ${checked}, заданий: ${globalIds.size}, ` +
     `ошибок: ${totalErrors}, предупреждений: ${totalWarnings}`
   );
   process.exit(totalErrors > 0 ? 1 : 0);
