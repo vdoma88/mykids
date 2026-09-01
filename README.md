@@ -27,6 +27,19 @@
 | [`docs/ADMIN-PANEL.md`](docs/ADMIN-PANEL.md) | Страницы и роли админки |
 | [`docs/content-format/README.md`](docs/content-format/README.md) | Формат пакетов заданий |
 
+## Доменное ядро
+
+```bash
+npm install
+npm test        # 49 тестов
+npm run typecheck
+```
+
+Правила системы — экономика, ledger, расписание — живут чистыми функциями в
+[`packages/domain`](packages/domain/README.md), без базы и сети. Там же описаны решения,
+которые легко сломать обратно: направление счёта при обмене, источник времени для
+суточных лимитов, поведение ночного окна на границе дней.
+
 ## Пакеты заданий
 
 ```bash

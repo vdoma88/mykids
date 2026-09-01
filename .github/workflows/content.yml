@@ -34,6 +34,23 @@ jobs:
             exit 1
           fi
 
+  domain:
+    name: Доменное ядро
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Установка зависимостей
+        run: npm install --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Типы
+        run: npm run typecheck
+      - name: Тесты
+        run: npm test
+
   legacy:
     name: Legacy-приложение
     runs-on: ubuntu-latest

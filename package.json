@@ -5,15 +5,20 @@
   "description": "Контроль экранного времени с заработком времени через учебные задания",
   "license": "MIT",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "server/*"
   ],
   "scripts": {
     "validate": "node packages/content-tools/bin/validate.js content/packs/*",
     "import:ukids": "node packages/content-tools/bin/import-ukids.js",
-    "test:legacy": "node legacy/smoke-test.js"
+    "test:legacy": "node legacy/smoke-test.js",
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=22"
