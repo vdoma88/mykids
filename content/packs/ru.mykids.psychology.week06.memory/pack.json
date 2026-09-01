@@ -1,0 +1,38 @@
+{
+  "id": "ru.mykids.psychology.week06.memory",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Неделя 6. Мнемотехники: как запоминать больше",
+  "description": "Осваиваем приёмы запоминания больших объёмов информации. Практикум выходного дня: Тренируемся запоминать новые слова и термины через яркие ассоциации.",
+  "subject": "psychology",
+  "gradeRange": [
+    11,
+    13
+  ],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": [
+    "психология",
+    "неделя 6"
+  ],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 3,
+    "dailyCreditCap": 20
+  },
+  "delivery": {
+    "itemsPerSession": 6,
+    "selection": "sequential",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json",
+    "items/006.json"
+  ]
+}

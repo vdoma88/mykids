@@ -1,0 +1,13 @@
+{
+  "id": "psy-w03-likert",
+  "type": "likert",
+  "stem": "Я замечаю, на что уходит моё время в течение дня.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "time_awareness",
+  "credits": 1
+}

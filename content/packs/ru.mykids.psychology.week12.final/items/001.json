@@ -1,0 +1,17 @@
+{
+  "id": "psy-w12-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Финал и защита проекта",
+  "widget": "certificate",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Главное — не идеальный результат, а то, что ты попробовал(а) и дошёл(шла) до конца."
+  ],
+  "topics": [
+    "Финал и защита проекта"
+  ]
+}

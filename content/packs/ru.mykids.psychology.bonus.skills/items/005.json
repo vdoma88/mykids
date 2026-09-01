@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-05-decision-matrix",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Матрица решений. Сравнить плюсы и минусы вариантов перед важным выбором.",
+  "widget": "decision-matrix",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Матрица решений"
+  ]
+}

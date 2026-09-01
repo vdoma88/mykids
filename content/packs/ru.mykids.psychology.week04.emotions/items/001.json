@@ -1,0 +1,17 @@
+{
+  "id": "psy-w04-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Эмоциональный компас",
+  "widget": "breathing",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "У каждой эмоции есть имя. Попробуй назвать, что ты чувствуешь прямо сейчас."
+  ],
+  "topics": [
+    "Эмоциональный компас"
+  ]
+}

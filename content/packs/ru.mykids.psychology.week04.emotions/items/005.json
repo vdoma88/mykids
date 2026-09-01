@@ -1,0 +1,8 @@
+{
+  "id": "psy-w04-practice-2",
+  "type": "parent_verified",
+  "stem": "Потренировать дыхательную технику в паре",
+  "verificationPrompt": "Пункт практикума выполнен: «Потренировать дыхательную технику в паре»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

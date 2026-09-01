@@ -1,0 +1,39 @@
+{
+  "id": "ru.mykids.psychology.bonus.skills",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Дополнительные навыки",
+  "description": "Семь коротких инструментов сверх основной программы: ценности, мечты, привычки, экранный баланс, решения, переговоры и самопрезентация.",
+  "subject": "psychology",
+  "gradeRange": [
+    11,
+    13
+  ],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": [
+    "психология",
+    "доп. навыки"
+  ],
+  "reward": {
+    "creditsPerCorrect": 4,
+    "bonusOnPerfect": 5,
+    "dailyCreditCap": 24
+  },
+  "delivery": {
+    "itemsPerSession": 1,
+    "selection": "random",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json",
+    "items/006.json",
+    "items/007.json"
+  ]
+}

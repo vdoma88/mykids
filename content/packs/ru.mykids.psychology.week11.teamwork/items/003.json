@@ -1,0 +1,13 @@
+{
+  "id": "psy-w11-likert",
+  "type": "likert",
+  "stem": "Я понимаю, какая роль в команде мне подходит.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "teamwork",
+  "credits": 1
+}

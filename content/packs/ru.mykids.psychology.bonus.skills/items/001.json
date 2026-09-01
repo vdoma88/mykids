@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-01-values-map",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Карта личных ценностей. Выбрать 5 главных ценностей из большого списка и понять, что действительно важно.",
+  "widget": "values-map",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Карта личных ценностей"
+  ]
+}

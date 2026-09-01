@@ -1,0 +1,17 @@
+{
+  "id": "psy-w02-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Мотивация: хочу vs надо",
+  "widget": "smart-goal",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Подумай: чего ты хочешь сам(а), а не потому что «так надо»?"
+  ],
+  "topics": [
+    "Мотивация: хочу vs надо"
+  ]
+}

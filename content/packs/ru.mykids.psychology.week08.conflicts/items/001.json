@@ -1,0 +1,17 @@
+{
+  "id": "psy-w08-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Конфликтология",
+  "widget": "conflict-cases",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Спор — это нормально, но кричать не обязательно, можно договориться."
+  ],
+  "topics": [
+    "Конфликтология"
+  ]
+}

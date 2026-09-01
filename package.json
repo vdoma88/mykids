@@ -1,0 +1,21 @@
+{
+  "name": "mykids",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Контроль экранного времени с заработком времени через учебные задания",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "validate": "node packages/content-tools/bin/validate.js content/packs/*",
+    "import:ukids": "node packages/content-tools/bin/import-ukids.js",
+    "test:legacy": "node legacy/smoke-test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

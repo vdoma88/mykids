@@ -1,0 +1,13 @@
+{
+  "id": "psy-w06-likert",
+  "type": "likert",
+  "stem": "У меня есть свои приёмы, чтобы запоминать новое.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "learning_strategies",
+  "credits": 1
+}

@@ -1,0 +1,17 @@
+{
+  "id": "psy-w07-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Личные границы: как говорить «нет»",
+  "widget": "i-statement",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Можно вежливо сказать «нет» и не чувствовать себя виноватым."
+  ],
+  "topics": [
+    "Личные границы: как говорить «нет»"
+  ]
+}

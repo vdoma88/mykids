@@ -1,0 +1,8 @@
+{
+  "id": "psy-w06-practice-1",
+  "type": "parent_verified",
+  "stem": "Выбрать 5 новых слов или терминов",
+  "verificationPrompt": "Пункт практикума выполнен: «Выбрать 5 новых слов или терминов»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

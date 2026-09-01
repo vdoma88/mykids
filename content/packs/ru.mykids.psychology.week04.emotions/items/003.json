@@ -1,0 +1,13 @@
+{
+  "id": "psy-w04-likert",
+  "type": "likert",
+  "stem": "Я могу назвать словами, что чувствую, когда злюсь или расстроен(а).",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "emotional_awareness",
+  "credits": 1
+}

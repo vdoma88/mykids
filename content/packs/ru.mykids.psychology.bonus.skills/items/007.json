@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-07-pitch-30s",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Самопрезентация за 30 секунд. Собрать короткий рассказ о себе — кто я, чем увлекаюсь, что ищу.",
+  "widget": "pitch-30s",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Самопрезентация за 30 секунд"
+  ]
+}

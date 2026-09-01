@@ -1,0 +1,13 @@
+{
+  "id": "psy-w05-likert",
+  "type": "likert",
+  "stem": "Прежде чем поверить чему-то в интернете, я думаю, факт это или мнение.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "critical_thinking",
+  "credits": 1
+}

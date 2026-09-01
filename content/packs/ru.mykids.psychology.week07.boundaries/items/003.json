@@ -1,0 +1,13 @@
+{
+  "id": "psy-w07-likert",
+  "type": "likert",
+  "stem": "Мне удаётся сказать «нет», когда я не хочу соглашаться.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "boundaries",
+  "credits": 1
+}

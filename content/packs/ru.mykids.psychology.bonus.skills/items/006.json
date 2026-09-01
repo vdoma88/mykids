@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-06-negotiation-winwin",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Переговоры win-win. Потренироваться искать решение, которое устраивает обе стороны.",
+  "widget": "negotiation-winwin",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Переговоры win-win"
+  ]
+}
