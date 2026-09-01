@@ -56,6 +56,9 @@ func New(p config.Policy, d Desktop, e Enforcer, st state.State) (*Agent, error)
 // State возвращает текущее состояние для сохранения.
 func (a *Agent) State() state.State { return a.st }
 
+// IsAllowlisted сообщает, освобождён ли процесс от учёта и блокировки.
+func (a *Agent) IsAllowlisted(process string) bool { return a.acc.IsAllowlisted(process) }
+
 // Tick — один шаг цикла. Возвращает вердикт, чтобы вызывающий мог его показать.
 func (a *Agent) Tick(now time.Time) (usage.Verdict, error) {
 	moment := schedule.At(now, a.Location)

@@ -109,17 +109,12 @@ func run(cmd, dataDir string, interval time.Duration) error {
 
 	switch cmd {
 	case "status":
-		v, err := a.Tick(time.Now())
-		if err != nil {
-			return err
-		}
-		fmt.Printf("политика:   %s\n", policyPath)
-		fmt.Printf("состояние:  %s\n", statePath)
-		fmt.Printf("пояс:       %s\n", policy.Timezone)
-		fmt.Printf("состояние:  %s\n", describe(v))
-		if st.UncleanStops > 0 {
-			fmt.Printf("нештатных остановок: %d\n", st.UncleanStops)
-		}
+		now := time.Now()
+		// Ошибку наблюдения не возвращаем: диагностическая команда обязана
+		// напечатать всё, что смогла узнать, и показать саму ошибку — иначе
+		// от неё нет пользы ровно в тот момент, когда что-то сломалось.
+		v, tickErr := a.Tick(now)
+		printStatus(a, v, now, policy, policyPath, statePath, tickErr)
 		return nil
 	case "watch", "run":
 		return loop(a, statePath, interval, cmd == "run")
