@@ -1,0 +1,24 @@
+name: Content packs
+
+on:
+  pull_request:
+    paths:
+      - 'content/**'
+      - 'packages/content-tools/**'
+      - 'docs/content-format/**'
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install content-tools deps
+        working-directory: packages/content-tools
+        run: npm install --no-audit --no-fund
+      - name: Validate task packs
+        run: node packages/content-tools/bin/validate.js content/packs/*

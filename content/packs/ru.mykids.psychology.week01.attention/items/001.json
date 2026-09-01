@@ -1,0 +1,12 @@
+{
+  "id": "psy-w01-schulte",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Таблица Шульте: найди числа по порядку от 1 до 25 как можно быстрее, стараясь не отвлекаться.",
+  "widget": "schulte",
+  "props": { "size": 5, "showTimer": true },
+  "completionRule": { "minDurationSec": 15 },
+  "credits": 3,
+  "hints": ["Смотри в центр таблицы и старайся замечать числа боковым зрением."],
+  "topics": ["концентрация внимания"]
+}

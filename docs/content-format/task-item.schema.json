@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mykids.local/schemas/task-item.schema.json",
+  "title": "MyKids Task Item",
+  "type": "object",
+  "required": ["id", "type", "stem"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$" },
+    "type": {
+      "type": "string",
+      "enum": ["single_choice", "multi_choice", "numeric", "short_text", "ordering",
+               "matching", "cloze", "code",
+               "likert", "reflection", "parent_verified", "interactive"]
+    },
+    "stem": { "type": "string", "minLength": 1 },
+    "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "credits": { "type": "integer", "minimum": 0, "maximum": 50 },
+    "topics": { "type": "array", "items": { "type": "string" } },
+    "hints": { "type": "array", "items": { "type": "string" } },
+    "solution": { "type": "string" },
+    "media": { "type": "string", "pattern": "^assets/" },
+    "cooldownHours": { "type": "number", "minimum": 0 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "single_choice" } }, "required": ["type"] },
+      "then": {
+        "required": ["options"],
+        "properties": {
+          "options": {
+            "type": "array", "minItems": 2, "maxItems": 8,
+            "items": {
+              "type": "object",
+              "required": ["text", "correct"],
+              "properties": {
+                "text": { "type": "string", "minLength": 1 },
+                "correct": { "type": "boolean" },
+                "feedback": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "multi_choice" } }, "required": ["type"] },
+      "then": {
+        "required": ["options"],
+        "properties": {
+          "options": { "type": "array", "minItems": 2, "maxItems": 10 },
+          "partialCredit": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "numeric" } }, "required": ["type"] },
+      "then": {
+        "required": ["answer"],
+        "properties": {
+          "answer": {
+            "type": "object",
+            "required": ["value"],
+            "additionalProperties": false,
+            "properties": {
+              "value": { "type": "number" },
+              "unit": { "type": "string" },
+              "tolerance": { "type": "number", "minimum": 0 },
+              "relativeTolerance": { "type": "number", "minimum": 0, "maximum": 1 },
+              "acceptedUnits": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "short_text" } }, "required": ["type"] },
+      "then": {
+        "required": ["answer"],
+        "properties": {
+          "answer": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "accepted": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+              "pattern": { "type": "string" },
+              "caseSensitive": { "type": "boolean" },
+              "ignoreYo": { "type": "boolean", "description": "Считать е и ё одинаковыми" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "ordering" } }, "required": ["type"] },
+      "then": {
+        "required": ["sequence"],
+        "properties": { "sequence": { "type": "array", "items": { "type": "string" }, "minItems": 2 } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "matching" } }, "required": ["type"] },
+      "then": {
+        "required": ["pairs"],
+        "properties": {
+          "pairs": {
+            "type": "array", "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["left", "right"],
+              "properties": { "left": { "type": "string" }, "right": { "type": "string" } },
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "cloze" } }, "required": ["type"] },
+      "then": {
+        "required": ["blanks"],
+        "properties": {
+          "blanks": {
+            "type": "array", "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "accepted"],
+              "properties": {
+                "id": { "type": "string" },
+                "accepted": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "likert" } }, "required": ["type"] },
+      "then": {
+        "required": ["scale"],
+        "properties": {
+          "scale": {
+            "type": "object",
+            "required": ["min", "max"],
+            "additionalProperties": false,
+            "properties": {
+              "min": { "type": "integer" },
+              "max": { "type": "integer" },
+              "minLabel": { "type": "string" },
+              "maxLabel": { "type": "string" },
+              "reverse": { "type": "boolean" }
+            }
+          },
+          "dimension": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "reflection" } }, "required": ["type"] },
+      "then": {
+        "properties": {
+          "minChars": { "type": "integer", "minimum": 1, "default": 40 },
+          "prompts": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "parent_verified" } }, "required": ["type"] },
+      "then": {
+        "required": ["verificationPrompt"],
+        "properties": { "verificationPrompt": { "type": "string", "minLength": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "interactive" } }, "required": ["type"] },
+      "then": {
+        "required": ["widget"],
+        "properties": {
+          "widget": {
+            "type": "string",
+            "description": "Идентификатор зарегистрированного виджета в task-runner",
+            "enum": ["schulte", "eisenhower", "breathing", "facts-vs-opinion", "memory-pairs",
+                     "smart-goal", "i-statement", "mindmap", "speech-timer", "team-roles",
+                     "values-map", "habit-tracker", "decision-matrix"]
+          },
+          "props": { "type": "object" },
+          "completionRule": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "minScore": { "type": "number" },
+              "minDurationSec": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "code" } }, "required": ["type"] },
+      "then": {
+        "required": ["language", "tests"],
+        "properties": {
+          "language": { "type": "string", "enum": ["python", "javascript"] },
+          "starterCode": { "type": "string" },
+          "tests": {
+            "type": "array", "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["input", "expected"],
+              "properties": {
+                "input": {},
+                "expected": {},
+                "hidden": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "ru.mykids.psychology.week01.attention",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Неделя 1. Внимание и память",
+  "description": "Как устроено внимание, тренажёр концентрации и первое домашнее задание. Перенос недели 1 программы UKids Home.",
+  "subject": "psychology",
+  "gradeRange": [11, 13],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": ["психология", "внимание", "неделя 1"],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 3,
+    "dailyCreditCap": 20,
+    "penaltyPerWrong": 0
+  },
+  "delivery": {
+    "itemsPerSession": 4,
+    "selection": "sequential",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json"
+  ]
+}
