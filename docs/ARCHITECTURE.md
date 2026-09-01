@@ -53,7 +53,7 @@
 | Бэкенд | **TypeScript / NestJS + PostgreSQL** | Общие типы с админкой и Task Runner через один пакет `@mykids/contracts` |
 | Админка | **React + TanStack Query + Vite** | |
 | Task Runner | **TypeScript, без фреймворка или Preact** | Должен быть лёгким — крутится в WebView на слабом телефоне |
-| Windows-агент | **C# / .NET 8** — Windows Service + WPF или WinUI 3 | Прямой доступ к Win32 API без прослоек, нормальная упаковка в MSI |
+| Windows-агент | **Go** (изначально планировался C# / .NET 8) | Один статический `.exe` без установки рантайма на компьютер ребёнка; кросс-сборка из Linux, поэтому агент собирается в CI. Минус — оверлей пишется на голых вызовах user32 |
 | Android-агент | **Kotlin + Jetpack Compose** | Единственный вменяемый путь к системным API |
 | Локальное хранилище агентов | **SQLite** | |
 
