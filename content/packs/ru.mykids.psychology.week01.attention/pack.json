@@ -1,0 +1,38 @@
+{
+  "id": "ru.mykids.psychology.week01.attention",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Неделя 1. Знакомство и мозг: как устроено внимание и память",
+  "description": "Разбор того, как работает внимание и память, через игру-тренажёр на скорость поиска. Практикум выходного дня: Ребята договариваются о правилах группы и находят свою «суперсилу» — сильную сторону характера.",
+  "subject": "psychology",
+  "gradeRange": [
+    11,
+    13
+  ],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": [
+    "психология",
+    "неделя 1"
+  ],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 3,
+    "dailyCreditCap": 20
+  },
+  "delivery": {
+    "itemsPerSession": 6,
+    "selection": "sequential",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json",
+    "items/006.json"
+  ]
+}

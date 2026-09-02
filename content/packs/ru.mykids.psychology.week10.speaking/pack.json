@@ -1,0 +1,38 @@
+{
+  "id": "ru.mykids.psychology.week10.speaking",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Неделя 10. Публичные выступления",
+  "description": "Разбираем структуру речи, работу с голосом и жестами, справляемся со страхом сцены. Практикум выходного дня: Каждый готовит и произносит короткую речь на 2 минуты перед группой.",
+  "subject": "psychology",
+  "gradeRange": [
+    11,
+    13
+  ],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": [
+    "психология",
+    "неделя 10"
+  ],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 3,
+    "dailyCreditCap": 20
+  },
+  "delivery": {
+    "itemsPerSession": 6,
+    "selection": "sequential",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json",
+    "items/006.json"
+  ]
+}

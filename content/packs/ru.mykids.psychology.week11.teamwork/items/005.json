@@ -1,0 +1,8 @@
+{
+  "id": "psy-w11-practice-2",
+  "type": "parent_verified",
+  "stem": "Набросать концепт финального проекта",
+  "verificationPrompt": "Пункт практикума выполнен: «Набросать концепт финального проекта»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

@@ -1,0 +1,17 @@
+{
+  "id": "psy-w10-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Публичные выступления",
+  "widget": "speech-timer",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Перед выступлением можно потренироваться дома перед зеркалом."
+  ],
+  "topics": [
+    "Публичные выступления"
+  ]
+}

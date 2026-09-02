@@ -1,0 +1,17 @@
+{
+  "id": "psy-w03-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Тайм-менеджмент: где теряется время",
+  "widget": "eisenhower",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Найди, на что уходит время зря — игры, соцсети — и подумай, что с этим делать."
+  ],
+  "topics": [
+    "Тайм-менеджмент: где теряется время"
+  ]
+}

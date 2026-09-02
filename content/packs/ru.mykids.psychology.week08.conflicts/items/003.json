@@ -1,0 +1,13 @@
+{
+  "id": "psy-w08-likert",
+  "type": "likert",
+  "stem": "В споре я могу говорить спокойно, даже если не согласен(на).",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "conflict_skills",
+  "credits": 1
+}

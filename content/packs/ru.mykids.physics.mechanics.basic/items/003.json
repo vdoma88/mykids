@@ -1,0 +1,14 @@
+{
+  "id": "phys-mech-003",
+  "type": "single_choice",
+  "difficulty": 1,
+  "stem": "Какая физическая величина измеряется в паскалях?",
+  "options": [
+    { "text": "Давление", "correct": true, "feedback": "Верно: 1 Па = 1 Н/м²." },
+    { "text": "Сила", "correct": false, "feedback": "Сила измеряется в ньютонах." },
+    { "text": "Работа", "correct": false, "feedback": "Работа измеряется в джоулях." },
+    { "text": "Мощность", "correct": false, "feedback": "Мощность измеряется в ваттах." }
+  ],
+  "credits": 1,
+  "topics": ["единицы измерения"]
+}

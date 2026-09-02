@@ -1,0 +1,8 @@
+{
+  "id": "psy-w10-practice-3",
+  "type": "parent_verified",
+  "stem": "Получить обратную связь по кругу",
+  "verificationPrompt": "Пункт практикума выполнен: «Получить обратную связь по кругу»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

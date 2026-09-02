@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  content:
+    name: Пакеты заданий
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Установка зависимостей
+        working-directory: packages/content-tools
+        run: npm install --no-audit --no-fund
+
+      - name: Валидация пакетов
+        run: node packages/content-tools/bin/validate.js content/packs/*
+
+      # Сгенерированные пакеты не должны расходиться с legacy-источником:
+      # если кто-то правит их вручную, следующий импорт молча затрёт правки.
+      - name: Сгенерированный контент актуален
+        run: |
+          node packages/content-tools/bin/import-ukids.js
+          node packages/content-tools/bin/build-index.js
+          # --porcelain, а не diff: он видит и новые, и удалённые файлы
+          if [ -n "$(git status --porcelain -- content/)" ]; then
+            echo "::error::content/ расходится с legacy/ukids-app.html — перегенерируйте: npm run import:ukids"
+            git status --porcelain -- content/
+            exit 1
+          fi
+
+  domain:
+    name: Доменное ядро
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Установка зависимостей
+        run: npm install --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Типы
+        run: npm run typecheck
+      - name: Тесты
+        run: npm test
+
+  agent:
+    name: Windows-агент
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Тесты
+        run: go test ./...
+      - name: Проверки
+        run: |
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go vet ./...
+      - name: Сборка exe
+        run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mykids-agent-windows-x64
+          path: agents/windows/dist/mykids-agent.exe
+
+  legacy:
+    name: Браузерные тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Дымовой тест legacy
+        run: node legacy/smoke-test.js
+
+      - name: Сборка раннера
+        run: npm run build -w @mykids/task-runner
+
+      - name: Дымовой тест раннера
+        run: node packages/task-runner/smoke-test.mjs

@@ -1,0 +1,33 @@
+{
+  "id": "ru.mykids.physics.mechanics.basic",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Механика: базовый уровень",
+  "description": "Второй закон Ньютона, равномерное движение, плотность и давление.",
+  "subject": "physics",
+  "gradeRange": [12, 15],
+  "locale": "ru-RU",
+  "author": "MyKids",
+  "license": "CC-BY-4.0",
+  "tags": ["физика", "механика", "7 класс"],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 5,
+    "dailyCreditCap": 40,
+    "penaltyPerWrong": 0
+  },
+  "delivery": {
+    "itemsPerSession": 5,
+    "selection": "random",
+    "passThreshold": 0.7,
+    "cooldownHoursPerItem": 24,
+    "timeLimitSec": 600
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json"
+  ]
+}

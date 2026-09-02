@@ -1,0 +1,8 @@
+{
+  "id": "psy-w08-practice-3",
+  "type": "parent_verified",
+  "stem": "Проговорить план действий на будущее",
+  "verificationPrompt": "Пункт практикума выполнен: «Проговорить план действий на будущее»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

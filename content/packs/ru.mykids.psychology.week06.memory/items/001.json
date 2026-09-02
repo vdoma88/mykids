@@ -1,0 +1,17 @@
+{
+  "id": "psy-w06-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Мнемотехники: как запоминать больше",
+  "widget": "memory-pairs",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Чтобы запомнить слово, придумай смешную картинку в голове — так легче."
+  ],
+  "topics": [
+    "Мнемотехники: как запоминать больше"
+  ]
+}

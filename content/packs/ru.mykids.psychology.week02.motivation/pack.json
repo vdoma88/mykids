@@ -1,0 +1,38 @@
+{
+  "id": "ru.mykids.psychology.week02.motivation",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Неделя 2. Мотивация: хочу vs надо",
+  "description": "Ищем личный интерес в учёбе и хобби, разбираем разницу между «надо» и «хочу». Практикум выходного дня: Формулируем одну личную цель на ближайшие 3 месяца по методике SMART.",
+  "subject": "psychology",
+  "gradeRange": [
+    11,
+    13
+  ],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": [
+    "психология",
+    "неделя 2"
+  ],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 3,
+    "dailyCreditCap": 20
+  },
+  "delivery": {
+    "itemsPerSession": 6,
+    "selection": "sequential",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json",
+    "items/006.json"
+  ]
+}

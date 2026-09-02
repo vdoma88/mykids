@@ -1,0 +1,13 @@
+{
+  "id": "psy-w01-likert",
+  "type": "likert",
+  "stem": "Мне легко сосредоточиться на задании, даже если рядом лежит телефон.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "attention_control",
+  "credits": 1
+}

@@ -1,0 +1,8 @@
+{
+  "id": "psy-w05-practice-1",
+  "type": "parent_verified",
+  "stem": "Выбрать позицию по теме дебатов",
+  "verificationPrompt": "Пункт практикума выполнен: «Выбрать позицию по теме дебатов»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

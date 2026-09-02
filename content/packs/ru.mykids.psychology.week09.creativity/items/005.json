@@ -1,0 +1,8 @@
+{
+  "id": "psy-w09-practice-2",
+  "type": "parent_verified",
+  "stem": "Набросать 10 идей без критики",
+  "verificationPrompt": "Пункт практикума выполнен: «Набросать 10 идей без критики»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

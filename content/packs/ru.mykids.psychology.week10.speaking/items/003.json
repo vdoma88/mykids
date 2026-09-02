@@ -1,0 +1,13 @@
+{
+  "id": "psy-w10-likert",
+  "type": "likert",
+  "stem": "Я справляюсь с волнением, когда нужно говорить перед другими.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "public_speaking",
+  "credits": 1
+}

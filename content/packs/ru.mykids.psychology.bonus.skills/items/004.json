@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-04-digital-balance",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Цифровой баланс. Спокойно посмотреть на то, сколько времени уходит на разные экранные активности.",
+  "widget": "digital-balance",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Цифровой баланс"
+  ]
+}

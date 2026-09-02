@@ -1,0 +1,31 @@
+{
+  "name": "mykids",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Контроль экранного времени с заработком времени через учебные задания",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "server/*"
+  ],
+  "scripts": {
+    "validate": "node packages/content-tools/bin/validate.js content/packs/*",
+    "import:ukids": "node packages/content-tools/bin/import-ukids.js",
+    "test:legacy": "node legacy/smoke-test.js",
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "dev:runner": "npm run dev -w @mykids/task-runner",
+    "content:index": "node packages/content-tools/bin/build-index.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "esbuild": "^0.24.2",
+    "@types/node": "^22.10.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "ru.mykids.psychology.week03.time",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "title": "Неделя 3. Тайм-менеджмент: где теряется время",
+  "description": "Разбираем главных «пожирателей времени» и как с ними быть. Практикум выходного дня: Составляем гибкий план идеального дня с учётом учёбы, отдыха и хобби.",
+  "subject": "psychology",
+  "gradeRange": [
+    11,
+    13
+  ],
+  "locale": "ru-RU",
+  "author": "UKids Home",
+  "license": "CC-BY-NC-4.0",
+  "tags": [
+    "психология",
+    "неделя 3"
+  ],
+  "reward": {
+    "creditsPerCorrect": 2,
+    "bonusOnPerfect": 3,
+    "dailyCreditCap": 20
+  },
+  "delivery": {
+    "itemsPerSession": 6,
+    "selection": "sequential",
+    "passThreshold": 0.5,
+    "cooldownHoursPerItem": 168
+  },
+  "items": [
+    "items/001.json",
+    "items/002.json",
+    "items/003.json",
+    "items/004.json",
+    "items/005.json",
+    "items/006.json"
+  ]
+}

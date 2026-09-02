@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-02-vision-board",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Доска мечты. Собрать короткие цели-мечты по разным сферам жизни: учёба, спорт, творчество, отношения.",
+  "widget": "vision-board",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Доска мечты"
+  ]
+}

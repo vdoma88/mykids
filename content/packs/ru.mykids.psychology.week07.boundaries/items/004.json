@@ -1,0 +1,8 @@
+{
+  "id": "psy-w07-practice-1",
+  "type": "parent_verified",
+  "stem": "Выбрать сложную ситуацию из жизни",
+  "verificationPrompt": "Пункт практикума выполнен: «Выбрать сложную ситуацию из жизни»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

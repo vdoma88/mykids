@@ -1,0 +1,13 @@
+{
+  "id": "psy-w12-likert",
+  "type": "likert",
+  "stem": "За последние недели я стал(а) лучше понимать себя.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "minLabel": "Совсем не про меня",
+    "maxLabel": "Точно про меня"
+  },
+  "dimension": "self_reflection",
+  "credits": 1
+}

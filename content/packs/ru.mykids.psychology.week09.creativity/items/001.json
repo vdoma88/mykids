@@ -1,0 +1,17 @@
+{
+  "id": "psy-w09-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Креативность: карты мыслей",
+  "widget": "mindmap",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Не бойся придумывать даже странные идеи — потом выберем лучшие."
+  ],
+  "topics": [
+    "Креативность: карты мыслей"
+  ]
+}

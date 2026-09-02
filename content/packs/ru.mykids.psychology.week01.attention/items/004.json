@@ -1,0 +1,8 @@
+{
+  "id": "psy-w01-practice-1",
+  "type": "parent_verified",
+  "stem": "Договориться о 3 правилах группы",
+  "verificationPrompt": "Пункт практикума выполнен: «Договориться о 3 правилах группы»?",
+  "credits": 3,
+  "cooldownHours": 168
+}

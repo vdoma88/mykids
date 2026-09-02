@@ -1,0 +1,17 @@
+{
+  "id": "psy-w11-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Командная работа: роли в проекте",
+  "widget": "team-roles",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "В команде у каждого своя роль — не обязательно быть лидером, чтобы быть важным."
+  ],
+  "topics": [
+    "Командная работа: роли в проекте"
+  ]
+}

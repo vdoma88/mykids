@@ -1,0 +1,14 @@
+{
+  "id": "psy-bonus-03-habit-tracker",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Трекер полезных привычек. Отмечать по дням недели три маленькие привычки роста.",
+  "widget": "habit-tracker",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 4,
+  "topics": [
+    "Трекер полезных привычек"
+  ]
+}

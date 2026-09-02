@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MyKids — задания</title>
+<style>
+:root{--paper:#F5F3EE;--card:#fff;--ink:#242229;--soft:#6B6772;--line:#E4E0D8;--brand:#372E5C;--ok:#3A8F5E;--bad:#C0564F;}
+*{box-sizing:border-box;}
+body{margin:0;padding:24px;background:var(--paper);color:var(--ink);font:15px/1.55 system-ui,sans-serif;}
+main{max-width:720px;margin:0 auto;}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
+h1{font-size:20px;margin:0;}
+#balance{font-size:13px;color:var(--soft);}
+#pack-list{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));}
+.pack{display:flex;flex-direction:column;gap:2px;text-align:left;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card);cursor:pointer;font:inherit;}
+.pack:hover{border-color:var(--brand);}
+.pack span{font-size:12px;color:var(--soft);}
+.card,.summary{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:20px;}
+.progress{font-size:12px;color:var(--soft);margin:0 0 12px;}
+.stem{font-size:17px;margin:0 0 14px;}
+.opt{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;}
+.opt:hover{background:#FBFAF7;}
+input[type=text],textarea,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:100%;}
+.blank{display:inline-block;width:120px;}
+button{font:inherit;padding:9px 16px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;}
+button:disabled{opacity:.5;cursor:not-allowed;}
+.order-list li{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.order-list li span{flex:1;}
+.order-list button{padding:2px 8px;}
+.match-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.match-row span{flex:1;}
+.likert{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.likert label{display:flex;flex-direction:column;align-items:center;}
+.scale-label{font-size:12px;color:var(--soft);max-width:120px;}
+.feedback{min-height:22px;font-size:14px;color:var(--soft);}
+.credits-earned strong{color:var(--ok);}
+.hints{margin-top:12px;font-size:13px;color:var(--soft);}
+.schulte-grid{display:grid;gap:6px;max-width:320px;}
+.schulte-cell{aspect-ratio:1;background:var(--card);color:var(--ink);border:1px solid var(--line);font-size:15px;padding:0;}
+.schulte-cell.found{background:#E7F3EC;color:var(--ok);border-color:var(--ok);}
+.breath-circle{width:130px;height:130px;border-radius:999px;background:#FBE1E6;border:2px solid #D5637B;color:#D5637B;display:flex;align-items:center;justify-content:center;font-weight:600;margin:0 auto 14px;}
+.placeholder-note,.hint,.prompt,.verify,.counter,.timed-left{font-size:13px;color:var(--soft);}
+.error{background:#FBE1E6;border:1px solid var(--bad);color:#8A2B41;padding:12px;border-radius:8px;}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Задания</h1>
+    <p id="balance"></p>
+  </header>
+  <div id="pack-list"></div>
+  <div id="stage"></div>
+</main>
+<script type="module" src="./dist/app.js"></script>
+</body>
+</html>

@@ -1,3 +1,14 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>UKids Home — программа развития soft skills</title>
+<style>
+html,body{margin:0;padding:0;background:#EDEBE4;min-height:100%;}
+body{padding:16px;}
+@media (max-width:640px){ body{padding:0;} }
+</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
 
@@ -271,6 +282,8 @@ label.field-lbl{font-size:11.5px; font-weight:600; color:var(--ink-soft); text-t
 }
 </style>
 
+</head>
+<body>
 <div class="ukids-root" id="ukidsRoot"></div>
 
 <script>
@@ -366,20 +379,75 @@ function playChime(kind){
   }catch(e){ /* audio not available, fail silently */ }
 }
 
-async function loadData(){
+const STORAGE_KEY = 'ukids-app-data';
+
+/**
+ * Хранилище работает в трёх средах: внутри хоста артефактов (window.storage),
+ * в обычном браузере (localStorage) и там, где недоступно ни то ни другое —
+ * тогда данные живут только до перезагрузки, и об этом честно сообщается.
+ */
+const STORAGE = (function(){
+  if(typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function'){
+    return {
+      kind: 'host',
+      async get(){ const res = await window.storage.get(STORAGE_KEY); return res && res.value; },
+      async set(v){ await window.storage.set(STORAGE_KEY, v); }
+    };
+  }
   try{
-    const res = await window.storage.get('ukids-app-data');
-    if(res && res.value){ DATA = JSON.parse(res.value); }
-  }catch(e){ /* no data yet */ }
-  DATA.bonus = DATA.bonus || {};
-  DATA.journal = DATA.journal || {};
-  DATA.parent = DATA.parent || {};
-  if(!DATA.activeChildId && DATA.children.length){ DATA.activeChildId = DATA.children[0].id; }
+    const probe = '__ukids_probe__';
+    window.localStorage.setItem(probe, '1');
+    window.localStorage.removeItem(probe);
+    return {
+      kind: 'local',
+      async get(){ return window.localStorage.getItem(STORAGE_KEY); },
+      async set(v){ window.localStorage.setItem(STORAGE_KEY, v); }
+    };
+  }catch(e){
+    let mem = null;
+    return {
+      kind: 'memory',
+      async get(){ return mem; },
+      async set(v){ mem = v; }
+    };
+  }
+})();
+
+let SAVE_ERROR = STORAGE.kind === 'memory'
+  ? 'Хранилище браузера недоступно — прогресс не сохранится после перезагрузки. Скачайте резервную копию на вкладке «Прогресс».'
+  : '';
+
+/** Достраивает отсутствующие ветки, чтобы старые или частичные копии не роняли рендер. */
+function normalizeData(d){
+  const data = (d && typeof d === 'object') ? d : {};
+  data.children = Array.isArray(data.children) ? data.children : [];
+  data.progress = (data.progress && typeof data.progress === 'object') ? data.progress : {};
+  data.bonus = (data.bonus && typeof data.bonus === 'object') ? data.bonus : {};
+  data.journal = (data.journal && typeof data.journal === 'object') ? data.journal : {};
+  data.parent = (data.parent && typeof data.parent === 'object') ? data.parent : {};
+  if(!data.activeChildId && data.children.length){ data.activeChildId = data.children[0].id; }
+  return data;
+}
+
+async function loadData(){
+  let raw = null;
+  try{ raw = await STORAGE.get(); }
+  catch(e){ /* хранилище не отдало данные — стартуем с чистого состояния */ }
+  if(raw){
+    try{ DATA = JSON.parse(raw); }
+    catch(e){ console.error('не удалось разобрать сохранённые данные', e); }
+  }
+  DATA = normalizeData(DATA);
   render();
 }
 async function saveData(){
-  try{ await window.storage.set('ukids-app-data', JSON.stringify(DATA)); }
-  catch(e){ console.error('save failed', e); }
+  try{
+    await STORAGE.set(JSON.stringify(DATA));
+    if(SAVE_ERROR && STORAGE.kind !== 'memory'){ SAVE_ERROR = ''; }
+  }catch(e){
+    console.error('save failed', e);
+    SAVE_ERROR = 'Не удалось сохранить прогресс. Скачайте резервную копию на вкладке «Прогресс».';
+  }
 }
 
 function getProgress(childId, week, kind){
@@ -416,7 +484,7 @@ function getBadges(childId){
 function render(){
   const root = document.getElementById('ukidsRoot');
   root.innerHTML = renderSidebar() + '<div class="main"><div class="main-inner" id="mainInner"></div></div>' + (MODAL ? renderModalShell() : '');
-  document.getElementById('mainInner').innerHTML = renderMain();
+  document.getElementById('mainInner').innerHTML = renderStorageWarning() + renderMain();
   attachGlobalHandlers();
   if(MODAL) attachModalHandlers();
   const importInput = document.getElementById('importFileInput');
@@ -428,8 +496,8 @@ function renderSidebar(){
   let chips = DATA.children.map((c,i)=>{
     const initials = c.name.trim().slice(0,1).toUpperCase();
     return `<div class="profile-chip ${c.id===DATA.activeChildId?'active':''}" data-action="switch-child" data-id="${c.id}">
-      <div class="avatar" style="${c.id!==DATA.activeChildId?('background:'+AVATAR_COLORS[i%4]+';color:#2A2333;'):''}">${initials}</div>
-      <div style="flex:1">${escapeHtml(c.name)}<div style="font-size:10.5px; opacity:.7; margin-top:-1px;">${c.age} лет</div></div>
+      <div class="avatar" style="${c.id!==DATA.activeChildId?('background:'+AVATAR_COLORS[i%4]+';color:#2A2333;'):''}">${escapeHtml(initials)}</div>
+      <div style="flex:1">${escapeHtml(c.name)}<div style="font-size:10.5px; opacity:.7; margin-top:-1px;">${escapeHtml(c.age)} лет</div></div>
       <div class="chip-edit" data-action="edit-child" data-id="${c.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></div>
     </div>`;
   }).join('');
@@ -460,6 +528,11 @@ function navItem(key,label,path){
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="${path}"/></svg>
     ${label}
   </div>`;
+}
+
+function renderStorageWarning(){
+  if(!SAVE_ERROR) return '';
+  return `<div style="background:#FBE1E6;border:1px solid #D5637B;color:#8A2B41;border-radius:10px;padding:11px 14px;margin-bottom:18px;font-size:13px;line-height:1.5;">${escapeHtml(SAVE_ERROR)}</div>`;
 }
 
 function renderMain(){
@@ -506,7 +579,7 @@ function renderTrail(){
       </div>
     </div>`;
   }).join('');
-  return `<div class="page-eyebrow">Программа · ${escapeHtml(child.name)}, ${child.age} лет</div>
+  return `<div class="page-eyebrow">Программа · ${escapeHtml(child.name)}, ${escapeHtml(child.age)} лет</div>
   <h1 class="page-title">Маршрут на 12 недель</h1>
   <p class="page-desc">Два занятия в неделю: будничное — теория и тренировка навыка, выходное — практикум и командная работа. Кликните на занятие, чтобы открыть таймер и упражнение.</p>
   <div class="trail"><div class="trail-line"></div>${stations}</div>`;
@@ -567,7 +640,7 @@ function renderJournal(){
   const moodPicks = MOODS.map(m=>`<div class="mood-opt ${JOURNAL_MOOD===m?'sel':''}" data-action="pick-mood" data-mood="${m}">${m}</div>`).join('');
   const list = entries.length ? entries.map(e=>`
     <div class="journal-entry">
-      <div class="je-head"><span>${e.mood} · ${e.date}</span><button class="je-del" data-action="delete-journal" data-id="${e.id}">Удалить</button></div>
+      <div class="je-head"><span>${escapeHtml(e.mood)} · ${escapeHtml(e.date)}</span><button class="je-del" data-action="delete-journal" data-id="${e.id}">Удалить</button></div>
       <div class="je-body">${e.grateful?('<b>Благодарен(на) за:</b> '+escapeHtml(e.grateful)+'<br/>'):''}${e.strength?('<b>Сильная сторона дня:</b> '+escapeHtml(e.strength)+'<br/>'):''}${e.win?('<b>Маленькая победа:</b> '+escapeHtml(e.win)):''}</div>
     </div>`).join('') : '<p style="color:var(--ink-soft);font-size:13px;">Пока нет записей — заполните первую прямо сейчас.</p>';
   return `<div class="page-eyebrow">Дневник роста · ${escapeHtml(child.name)}</div>
@@ -863,6 +936,13 @@ const ROLE_QUIZ = [
   ]}
 ];
 
+/** Перезапускает упражнение в контексте текущего занятия, не теряя ребёнка и неделю. */
+function restartExercise(kind){
+  const child = activeChild();
+  if(!child || !MODAL) return;
+  initExerciseBehavior(kind, child.id, MODAL.week, MODAL.kind === 'wd');
+}
+
 function initExerciseBehavior(kind, childId, week, isWd){
   const prog = getProgress(childId, week, 'wd');
   if(kind==='schulte') initSchulte();
@@ -914,7 +994,7 @@ function initSchulte(){
   }
   timerId = setInterval(()=>{ const t=document.getElementById('schulteTime'); if(t) t.textContent = fmtTime(Math.floor((Date.now()-startTs)/1000)); if(finished) clearInterval(timerId); }, 1000);
   paint();
-  document.querySelector('[data-action="schulte-restart"]').onclick = ()=>{ clearInterval(timerId); initExerciseBehavior('schulte'); };
+  document.querySelector('[data-action="schulte-restart"]').onclick = ()=>{ clearInterval(timerId); restartExercise('schulte'); };
 }
 
 // eisenhower
@@ -996,7 +1076,7 @@ function initMemory(prog){
     }));
   }
   paint();
-  const rb = document.querySelector('[data-action="mem-restart"]'); if(rb) rb.onclick = ()=>initExerciseBehavior('memory', null, null, true);
+  const rb = document.querySelector('[data-action="mem-restart"]'); if(rb) rb.onclick = ()=>restartExercise('memory');
 }
 
 // conflict
@@ -1111,9 +1191,7 @@ function handleImportFile(e){
       const parsed = JSON.parse(reader.result);
       if(!parsed || !Array.isArray(parsed.children)){ alert('Файл не похож на резервную копию UKids Home.'); return; }
       if(!confirm('Загрузить эти данные? Текущий прогресс в приложении будет заменён.')) return;
-      DATA = parsed;
-      DATA.bonus = DATA.bonus || {}; DATA.journal = DATA.journal || {}; DATA.parent = DATA.parent || {}; DATA.progress = DATA.progress || {};
-      if(!DATA.activeChildId && DATA.children.length) DATA.activeChildId = DATA.children[0].id;
+      DATA = normalizeData(parsed);
       saveData(); render();
     }catch(err){ alert('Не удалось прочитать файл — убедитесь, что это резервная копия UKids Home.'); }
   };
@@ -1332,7 +1410,7 @@ function initBonusExerciseBehavior(key, prog){
   if(key==='vision'){
     prog.data.items = prog.data.items || [];
     const grid = document.getElementById('visGrid');
-    function paint(){ grid.innerHTML = prog.data.items.map(it=>`<div class="vision-card"><div class="cat">${it.cat}</div>${escapeHtml(it.t)}</div>`).join(''); }
+    function paint(){ grid.innerHTML = prog.data.items.map(it=>`<div class="vision-card"><div class="cat">${escapeHtml(it.cat)}</div>${escapeHtml(it.t)}</div>`).join(''); }
     document.getElementById('visAdd').onclick = ()=>{
       const inp = document.getElementById('visInput'); const cat = document.getElementById('visCat').value;
       if(!inp.value.trim()) return; prog.data.items.push({t:inp.value.trim(), cat}); inp.value=''; paint();
@@ -1464,3 +1542,5 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight){
 loadData();
 })();
 </script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mykids.local/schemas/task-pack.schema.json",
+  "title": "MyKids Task Pack manifest",
+  "type": "object",
+  "required": ["id", "schemaVersion", "version", "title", "subject", "locale", "reward", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+$",
+      "description": "Обратная доменная нотация, напр. ru.mykids.physics.mechanics.basic"
+    },
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 600 },
+    "subject": {
+      "type": "string",
+      "enum": ["psychology", "math", "physics", "chemistry", "biology", "geography",
+               "history", "language", "literature", "cs", "logic", "finance", "other"]
+    },
+    "gradeRange": {
+      "type": "array", "items": { "type": "integer", "minimum": 5, "maximum": 18 },
+      "minItems": 2, "maxItems": 2
+    },
+    "locale": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" },
+    "author": { "type": "string" },
+    "license": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 20 },
+    "reward": {
+      "type": "object",
+      "required": ["creditsPerCorrect", "dailyCreditCap"],
+      "additionalProperties": false,
+      "properties": {
+        "creditsPerCorrect": { "type": "integer", "minimum": 0, "maximum": 50 },
+        "bonusOnPerfect": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "dailyCreditCap": {
+          "type": "integer", "minimum": 1, "maximum": 500,
+          "description": "Обязательный антифарм-потолок кредитов с пакета в сутки"
+        },
+        "penaltyPerWrong": { "type": "integer", "minimum": 0, "maximum": 50 }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "itemsPerSession": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "selection": { "type": "string", "enum": ["random", "sequential", "adaptive", "spaced"] },
+        "passThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cooldownHoursPerItem": { "type": "number", "minimum": 0 },
+        "timeLimitSec": { "type": "integer", "minimum": 10 }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^items/[A-Za-z0-9_.-]+\\.json$" },
+      "minItems": 1
+    }
+  }
+}

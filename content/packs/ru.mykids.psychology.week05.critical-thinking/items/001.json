@@ -1,0 +1,17 @@
+{
+  "id": "psy-w05-exercise",
+  "type": "interactive",
+  "difficulty": 2,
+  "stem": "Критическое мышление: факты vs мнения",
+  "widget": "facts-vs-opinion",
+  "completionRule": {
+    "minDurationSec": 30
+  },
+  "credits": 3,
+  "hints": [
+    "Факт можно проверить, а мнение — это чьё-то личное «я так думаю»."
+  ],
+  "topics": [
+    "Критическое мышление: факты vs мнения"
+  ]
+}
