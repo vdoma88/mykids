@@ -13,10 +13,11 @@
     "import:ukids": "node packages/content-tools/bin/import-ukids.js",
     "test:legacy": "node legacy/smoke-test.js",
     "test": "vitest run",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck -w @mykids/contracts -w @mykids/domain -w @mykids/task-runner",
     "build": "npm run build --workspaces --if-present",
     "dev:runner": "npm run dev -w @mykids/task-runner",
-    "content:index": "node packages/content-tools/bin/build-index.js"
+    "content:index": "node packages/content-tools/bin/build-index.js",
+    "test:server": "npm run test -w @mykids/api"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

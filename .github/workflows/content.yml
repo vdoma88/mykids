@@ -52,6 +52,45 @@ jobs:
       - name: Тесты
         run: npm test
 
+  server:
+    name: Сервер
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mykids_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mykids_test
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/mykids_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Установка зависимостей
+        run: npm install --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Клиент Prisma
+        run: npx prisma generate
+        working-directory: server/api
+      - name: Миграции
+        run: npx prisma migrate deploy
+        working-directory: server/api
+      - name: Типы
+        run: npx tsc --noEmit
+        working-directory: server/api
+      - name: Тесты
+        run: npx vitest run
+        working-directory: server/api
+
   agent:
     name: Windows-агент
     runs-on: ubuntu-latest

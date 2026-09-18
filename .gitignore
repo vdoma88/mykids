@@ -70,3 +70,6 @@ htmlcov/
 
 # Проектное
 .playwright/
+
+# Сервер
+server/api/.env

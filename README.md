@@ -27,6 +27,17 @@
 | [`docs/ADMIN-PANEL.md`](docs/ADMIN-PANEL.md) | Страницы и роли админки |
 | [`docs/content-format/README.md`](docs/content-format/README.md) | Формат пакетов заданий |
 
+## Сервер
+
+```bash
+cp deploy/.env.example deploy/.env      # и смените пароль с секретом
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Источник истины по балансам и политикам ([`server/api`](server/api/README.md)).
+Без него раннер и агент считают кредиты локально, а такие данные ребёнок может
+отредактировать. Данные об активности остаются на вашей машине.
+
 ## Доменное ядро
 
 ```bash

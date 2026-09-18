@@ -50,7 +50,7 @@
 
 | Компонент | Технология | Почему |
 |---|---|---|
-| Бэкенд | **TypeScript / NestJS + PostgreSQL** | Общие типы с админкой и Task Runner через один пакет `@mykids/contracts` |
+| Бэкенд | **TypeScript / Fastify + PostgreSQL + Prisma** (изначально планировался NestJS) | Общие типы с админкой и Task Runner через `@mykids/contracts`. Fastify вместо NestJS: монорепа на строгом ESM, декораторы NestJS тянут CommonJS и отдельный tsconfig |
 | Админка | **React + TanStack Query + Vite** | |
 | Task Runner | **TypeScript, без фреймворка или Preact** | Должен быть лёгким — крутится в WebView на слабом телефоне |
 | Windows-агент | **Go** (изначально планировался C# / .NET 8) | Один статический `.exe` без установки рантайма на компьютер ребёнка; кросс-сборка из Linux, поэтому агент собирается в CI. Минус — оверлей пишется на голых вызовах user32 |
