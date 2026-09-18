@@ -1,0 +1,255 @@
+// Схема базы MyKids.
+//
+// Главное решение: LedgerEntry только дополняется. Балансы нигде не хранятся
+// изменяемым полем — они считаются свёрткой журнала через @mykids/domain.
+// Это даёт аудит, разрешение конфликтов офлайн-синхронизации и откат ошибочных
+// начислений без пересчёта состояния.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Family {
+  id        String   @id @default(uuid())
+  name      String
+  timezone  String   @default("Europe/Moscow")
+  createdAt DateTime @default(now())
+
+  guardians  Guardian[]
+  children   Child[]
+  storeItems StoreItem[]
+}
+
+enum GuardianRole {
+  owner
+  parent
+  viewer
+}
+
+model Guardian {
+  id           String       @id @default(uuid())
+  familyId     String
+  email        String       @unique
+  passwordHash String
+  // Секрет TOTP; null, пока родитель не включил второй фактор.
+  totpSecret   String?
+  role         GuardianRole @default(parent)
+  createdAt    DateTime     @default(now())
+
+  family   Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  sessions Session[]
+
+  @@index([familyId])
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  guardianId String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  guardian Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@index([guardianId])
+}
+
+model Child {
+  id        String   @id @default(uuid())
+  familyId  String
+  name      String
+  birthYear Int?
+  createdAt DateTime @default(now())
+
+  family      Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  devices     Device[]
+  ledger      LedgerEntry[]
+  policy      Policy?
+  purchases   Purchase[]
+  attempts    Attempt[]
+  assignments PackAssignment[]
+
+  @@index([familyId])
+}
+
+enum Platform {
+  windows
+  android
+  web
+}
+
+model Device {
+  id           String   @id @default(uuid())
+  childId      String
+  platform     Platform
+  name         String
+  // Токен устройства хранится только хешем: утечка базы не должна давать
+  // возможность выдать себя за агента.
+  tokenHash    String   @unique
+  agentVersion String?
+  lastSeenAt   DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  child  Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  ledger LedgerEntry[]
+
+  @@index([childId])
+}
+
+model Policy {
+  id                  String   @id @default(uuid())
+  childId             String   @unique
+  timezone            String   @default("Europe/Moscow")
+  // Индекс 0 — воскресенье, как в Date.getDay().
+  dailyLimitMinutes   Int[]
+  carryOverMaxMinutes Int      @default(30)
+  // Окна расписания: форма проверяется zod-схемой на границе API.
+  windows             Json     @default("[]")
+  alwaysAllowed       String[] @default([])
+  // Экономика
+  creditsPerMinute          Int @default(2)
+  maxConvertedMinutesPerDay Int @default(45)
+  minCreditsToConvert       Int @default(10)
+  maxCreditsPerDay          Int @default(120)
+  updatedAt                 DateTime @updatedAt
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+}
+
+enum Currency {
+  minutes
+  credits
+}
+
+enum LedgerReason {
+  daily_grant
+  carry_over
+  task_reward
+  conversion_spend
+  conversion_gain
+  purchase
+  purchase_grant
+  screen_usage
+  manual_adjust
+  tamper_penalty
+  expiry
+}
+
+/// Журнал операций. Только вставка: строки не изменяются и не удаляются.
+model LedgerEntry {
+  id       String       @id @default(uuid())
+  childId  String
+  currency Currency
+  /// Целое со знаком. Минуты и кредиты не дробятся — это исключает
+  /// эксплойты округления при обмене.
+  amount   Int
+  reason   LedgerReason
+  refType  String?
+  refId    String?
+  deviceId String?
+  /// Часы устройства. Могут быть подкручены — суточные лимиты по ним не считаются.
+  occurredAt DateTime
+  /// Часы сервера. Источник истины для суточных окон.
+  recordedAt DateTime @default(now())
+  /// Монотонный счётчик устройства: ловит переупорядочивание и дубли.
+  seq        Int      @default(0)
+  note       String?
+
+  child  Child   @relation(fields: [childId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  /// Повторная отправка очереди синхронизации не должна удваивать списание.
+  @@unique([deviceId, seq], name: "device_seq")
+  @@index([childId, currency, recordedAt])
+  @@index([childId, recordedAt])
+}
+
+model StoreItem {
+  id               String   @id @default(uuid())
+  familyId         String
+  title            String
+  description      String?
+  costCurrency     Currency
+  costAmount       Int
+  /// Эффект покупки; форма проверяется zod-схемой на границе API.
+  effect           Json
+  maxPerDay        Int?
+  maxPerWeek       Int?
+  cooldownHours    Float?
+  requiresApproval Boolean  @default(false)
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  family    Family     @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([familyId])
+}
+
+enum PurchaseStatus {
+  pending
+  approved
+  rejected
+}
+
+model Purchase {
+  id          String         @id @default(uuid())
+  childId     String
+  storeItemId String
+  status      PurchaseStatus @default(approved)
+  cost        Int
+  currency    Currency
+  createdAt   DateTime       @default(now())
+  decidedAt   DateTime?
+
+  child     Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  storeItem StoreItem @relation(fields: [storeItemId], references: [id], onDelete: Restrict)
+
+  @@index([childId, createdAt])
+}
+
+model PackAssignment {
+  id        String   @id @default(uuid())
+  childId   String
+  packId    String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, packId])
+}
+
+enum AttemptStatus {
+  graded
+  pending_approval
+  approved
+  rejected
+}
+
+model Attempt {
+  id       String        @id @default(uuid())
+  childId  String
+  packId   String
+  itemId   String
+  /// Доля верности 0..1.
+  score    Float
+  status   AttemptStatus @default(graded)
+  /// Начисленные кредиты; 0, если урезаны лимитами или ждут подтверждения.
+  credits  Int           @default(0)
+  answer   Json?
+  createdAt DateTime     @default(now())
+  decidedAt DateTime?
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, createdAt])
+  @@index([childId, itemId, createdAt])
+  @@index([childId, packId, createdAt])
+}
