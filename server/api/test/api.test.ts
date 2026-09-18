@@ -184,6 +184,49 @@ describe('ребёнок и агент', () => {
   });
 });
 
+describe('правка политики', () => {
+  it('сохраняется целиком и переживает перечитывание', async () => {
+    const { auth, childId } = await withChild();
+    const current = (await app.inject({
+      method: 'GET', url: `/admin/children/${childId}/policy`, headers: auth,
+    })).json() as Record<string, unknown>;
+
+    const res = await app.inject({
+      method: 'PUT', url: `/admin/children/${childId}/policy`, headers: auth,
+      payload: {
+        ...current,
+        dailyLimitMinutes: [10, 45, 20, 20, 20, 30, 40],
+        // Поле есть в базе, но не входит в доменную схему: раньше strict-схема
+        // на нём падала и политику вообще нельзя было сохранить из админки.
+        alwaysAllowed: ['explorer.exe', 'chrome.exe'],
+        windows: [{ name: 'отбой', days: [1, 2, 3], from: '21:30', to: '07:00', mode: 'blocked' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const again = (await app.inject({
+      method: 'GET', url: `/admin/children/${childId}/policy`, headers: auth,
+    })).json() as { dailyLimitMinutes: number[]; windows: unknown[] };
+    expect(again.dailyLimitMinutes[1]).toBe(45);
+    expect(again.windows).toHaveLength(1);
+
+    const row = await prisma.policy.findUniqueOrThrow({ where: { childId } });
+    expect(row.alwaysAllowed).toEqual(['explorer.exe', 'chrome.exe']);
+  });
+
+  it('отвергает битое окно расписания', async () => {
+    const { auth, childId } = await withChild();
+    const current = (await app.inject({
+      method: 'GET', url: `/admin/children/${childId}/policy`, headers: auth,
+    })).json() as Record<string, unknown>;
+    const res = await app.inject({
+      method: 'PUT', url: `/admin/children/${childId}/policy`, headers: auth,
+      payload: { ...current, alwaysAllowed: [], windows: [{ name: 'кривое', days: [1], from: '25:00', to: '07:00', mode: 'blocked' }] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('ручная корректировка', () => {
   it('требует комментарий и попадает в журнал', async () => {
     const { auth, childId } = await withChild();
