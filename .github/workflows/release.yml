@@ -30,13 +30,19 @@ jobs:
         run: GOOS=windows GOARCH=amd64 go vet ./...
         working-directory: agents/windows
 
+      # Версию берём из тега: agent-v0.3.0 -> 0.3.0. Так бинарник и релиз не
+      # разъедутся, если кто-то забудет поправить её в исходнике.
       - name: Сборка exe
-        run: ./build.sh
+        run: VERSION="${GITHUB_REF_NAME#agent-v}" ./build.sh
         working-directory: agents/windows
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
 
       # Контрольная сумма: без неё нельзя проверить, что скачался наш файл.
+      # tee, а не просто перенаправление: сумму нужно видеть и в логе, чтобы
+      # сверить её с тем, что скачали, не распаковывая артефакт.
       - name: Контрольная сумма
-        run: sha256sum mykids-agent.exe > mykids-agent.exe.sha256
+        run: sha256sum mykids-agent.exe | tee mykids-agent.exe.sha256
         working-directory: agents/windows/dist
 
       - uses: actions/upload-artifact@v4
