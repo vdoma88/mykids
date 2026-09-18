@@ -130,6 +130,14 @@ describe('ребёнок и агент', () => {
     expect((second.json() as { balances: { minutes: number } }).balances.minutes).toBe(b1);
   });
 
+  it('sync отдаёт агенту белый список приложений', async () => {
+    const { device } = await withChild();
+    const res = await app.inject({ method: 'GET', url: '/agent/sync', headers: device });
+    const body = res.json() as { agent: { alwaysAllowed: string[] } };
+    // Без него ребёнок не позвонит родителю при нулевом балансе
+    expect(body.agent.alwaysAllowed.length).toBeGreaterThan(0);
+  });
+
   it('повторная отправка расхода не удваивает списание', async () => {
     const { device } = await withChild();
     await app.inject({ method: 'GET', url: '/agent/sync', headers: device });
@@ -145,6 +153,96 @@ describe('ребёнок и агент', () => {
 
     const retry = await app.inject({ method: 'POST', url: '/agent/usage', headers: device, payload });
     expect(retry.json()).toMatchObject({ accepted: 0, duplicates: 2 });
+  });
+
+  it('повторное сообщение о вмешательстве не ломается о счётчик устройства', async () => {
+    const { device } = await withChild();
+    // Подкрутку часов ребёнок может повторить хоть десять раз подряд, и каждая
+    // обязана записаться: событий вмешательства, а не одно на устройство.
+    for (const detail of ['часы переведены назад на 3h', 'часы переведены вперёд на 2h']) {
+      const res = await app.inject({
+        method: 'POST', url: '/agent/tamper', headers: device,
+        payload: { kind: 'clock', detail },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+  });
+
+  it('вмешательство не трогает баланс, пока родитель не назначил штраф', async () => {
+    const { device } = await withChild();
+    const before = (await app.inject({ method: 'GET', url: '/agent/sync', headers: device }))
+      .json() as { balances: { minutes: number } };
+
+    await app.inject({
+      method: 'POST', url: '/agent/tamper', headers: device,
+      payload: { kind: 'clock', detail: 'часы переведены назад на 3h' },
+    });
+
+    const after = (await app.inject({ method: 'GET', url: '/agent/sync', headers: device }))
+      .json() as { balances: { minutes: number } };
+    // Величину штрафа решает родитель; сам факт минут не списывает
+    expect(after.balances.minutes).toBe(before.balances.minutes);
+  });
+
+  it('родитель видит события вмешательства и может их закрыть', async () => {
+    const { auth, device, childId } = await withChild();
+    for (const detail of ['часы назад на 3h', 'часы вперёд на 2h']) {
+      await app.inject({
+        method: 'POST', url: '/agent/tamper', headers: device, payload: { kind: 'clock', detail },
+      });
+    }
+
+    const list = await app.inject({
+      method: 'GET', url: `/admin/children/${childId}/tampers`, headers: auth,
+    });
+    expect(list.statusCode).toBe(200);
+    const body = list.json() as { pending: number; events: { id: string; kind: string }[] };
+    expect(body.pending).toBe(2);
+    expect(body.events[0]!.kind).toBe('clock');
+
+    const review = await app.inject({
+      method: 'POST', url: `/admin/children/${childId}/tampers/review`, headers: auth,
+      payload: { ids: body.events.map((e) => e.id) },
+    });
+    expect(review.json()).toMatchObject({ reviewed: 2, pending: 0 });
+
+    const after = await app.inject({
+      method: 'GET', url: `/admin/children/${childId}/tampers?unreviewed=true`, headers: auth,
+    });
+    expect((after.json() as { events: unknown[] }).events).toHaveLength(0);
+  });
+
+  it('чужие события вмешательства закрыть нельзя', async () => {
+    const theirs = await withChild();
+    // Второй родитель — другая семья: тот же адрес почты занят первым.
+    const other = await app.inject({
+      method: 'POST', url: '/auth/register', payload: { ...creds, email: 'other@example.com' },
+    });
+    const mineAuth = { authorization: `Bearer ${(other.json() as { token: string }).token}` };
+    const mineChild = await app.inject({
+      method: 'POST', url: '/admin/children', headers: mineAuth, payload: { name: 'Аня' },
+    });
+    const mine = { auth: mineAuth, childId: (mineChild.json() as { id: string }).id };
+
+    await app.inject({
+      method: 'POST', url: '/agent/tamper', headers: theirs.device, payload: { kind: 'clock' },
+    });
+    const list = await app.inject({
+      method: 'GET', url: `/admin/children/${theirs.childId}/tampers`, headers: theirs.auth,
+    });
+    const ids = (list.json() as { events: { id: string }[] }).events.map((e) => e.id);
+
+    // Подставив чужой идентификатор события под своего ребёнка, родитель не
+    // должен закрыть его: условие обязано держаться и на childId.
+    const res = await app.inject({
+      method: 'POST', url: `/admin/children/${mine.childId}/tampers/review`, headers: mine.auth,
+      payload: { ids },
+    });
+    expect(res.json()).toMatchObject({ reviewed: 0 });
+    const still = await app.inject({
+      method: 'GET', url: `/admin/children/${theirs.childId}/tampers`, headers: theirs.auth,
+    });
+    expect((still.json() as { pending: number }).pending).toBe(1);
   });
 
   it('ребёнок видит свои правила, а не только баланс', async () => {

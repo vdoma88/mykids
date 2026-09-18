@@ -123,6 +123,46 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
     return { balances: await s.ledger.balances(childId), entries: rows };
   });
 
+  /**
+   * События вмешательства. Родитель должен их видеть: записывать подкрутку
+   * часов и не показывать её — то же, что не записывать.
+   */
+  app.get('/admin/children/:childId/tampers', async (req) => {
+    const { childId } = z.object({ childId: z.string().uuid() }).parse(req.params);
+    await assertOwnChild(s, req.guardian!.familyId, childId);
+    const { limit, unreviewed } = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      unreviewed: z.coerce.boolean().default(false),
+    }).parse(req.query);
+
+    const [events, pending] = await Promise.all([
+      s.prisma.tamperEvent.findMany({
+        where: { childId, ...(unreviewed ? { reviewedAt: null } : {}) },
+        orderBy: { recordedAt: 'desc' },
+        take: limit,
+        include: { device: { select: { name: true } } },
+      }),
+      s.prisma.tamperEvent.count({ where: { childId, reviewedAt: null } }),
+    ]);
+    return { pending, events };
+  });
+
+  /** Отметить события разобранными. Штраф, если нужен, идёт отдельной правкой. */
+  app.post('/admin/children/:childId/tampers/review', async (req) => {
+    assertCanEdit(req.guardian!.role);
+    const { childId } = z.object({ childId: z.string().uuid() }).parse(req.params);
+    await assertOwnChild(s, req.guardian!.familyId, childId);
+    const body = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) }).parse(req.body);
+
+    // childId в условии обязателен: без него родитель мог бы закрыть событие
+    // чужого ребёнка, подставив его идентификатор.
+    const { count } = await s.prisma.tamperEvent.updateMany({
+      where: { childId, id: { in: body.ids }, reviewedAt: null },
+      data: { reviewedAt: new Date() },
+    });
+    return { reviewed: count, pending: await s.prisma.tamperEvent.count({ where: { childId, reviewedAt: null } }) };
+  });
+
   /** Ручная корректировка. Комментарий обязателен — журнал должен объяснять себя. */
   app.post('/admin/children/:childId/adjust', async (req, reply) => {
     assertCanEdit(req.guardian!.role);

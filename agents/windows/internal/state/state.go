@@ -19,6 +19,15 @@ type State struct {
 	UncleanStops int `json:"uncleanStops"`
 	// Признак чистого завершения; сбрасывается при старте, ставится при выходе.
 	CleanShutdown bool `json:"cleanShutdown"`
+	// Остаток секунд, не набравший полной минуты для отправки на сервер.
+	// Без него перезапуск каждые полминуты обнулял бы расход.
+	PendingSeconds int `json:"pendingSeconds"`
+	// Поправка к системным часам и её происхождение. Переживает перезапуск:
+	// иначе перевод часов достаточно было бы дополнить остановкой агента.
+	ClockOffsetSeconds int  `json:"clockOffsetSeconds"`
+	ClockTrusted       bool `json:"clockTrusted"`
+	// Сколько раз замечена подкрутка часов. Растёт и уходит на сервер.
+	ClockTampers int `json:"clockTampers"`
 }
 
 // Load читает состояние. Отсутствующий или битый файл — не повод падать:

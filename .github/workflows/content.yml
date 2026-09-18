@@ -103,6 +103,17 @@ jobs:
         env:
           DATABASE_URL_E2E: postgresql://postgres:postgres@localhost:5432/mykids_test
 
+      # Агент проверяется против живого API, а не против фальшивого сервера из
+      # своих же тестов: только так видно расхождение схем.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Агент против настоящего API
+        run: ./integration.sh
+        working-directory: agents/windows
+        env:
+          DATABASE_URL_E2E: postgresql://postgres:postgres@localhost:5432/mykids_test
+
   agent:
     name: Windows-агент
     runs-on: ubuntu-latest

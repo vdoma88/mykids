@@ -3,6 +3,7 @@ package agent
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
@@ -53,6 +54,29 @@ func New(p config.Policy, d Desktop, e Enforcer, st state.State) (*Agent, error)
 	return &Agent{Policy: p, Desktop: d, Enforcer: e, Location: loc, acc: acc, st: st}, nil
 }
 
+// SetPolicy подменяет политику на лету — так применяется присланная сервером.
+//
+// Неизменившаяся политика не трогает ничего. Это не оптимизация: пересборка
+// учётчика сбрасывает точку отсчёта, и следующий замер списывает ноль. Обмен с
+// сервером идёт раз в минуту, так что безусловная пересборка дарила бы ребёнку
+// по нескольку секунд каждую минуту.
+func (a *Agent) SetPolicy(p config.Policy) (bool, error) {
+	if reflect.DeepEqual(a.Policy, p) {
+		return false, nil
+	}
+	loc, err := p.Location()
+	if err != nil {
+		return false, err
+	}
+	a.Policy, a.Location = p, loc
+	// Порог простоя и белый список зашиты в учётчик при создании: без
+	// пересборки новые значения не подействовали бы.
+	a.acc = usage.New(
+		time.Duration(p.IdleThresholdSeconds)*time.Second,
+		p.AlwaysAllowed, time.Minute)
+	return true, nil
+}
+
 // State возвращает текущее состояние для сохранения.
 func (a *Agent) State() state.State { return a.st }
 
@@ -82,12 +106,13 @@ func (a *Agent) Tick(now time.Time) (usage.Verdict, error) {
 		return usage.Verdict{}, fmt.Errorf("время простоя: %w", err)
 	}
 
-	a.acc.Observe(usage.Sample{
+	consumed := a.acc.Observe(usage.Sample{
 		At: now, Process: proc, Idle: idle, SessionLock: a.Desktop.SessionLocked(),
 	}, &a.st.Today, moment.Day)
 
 	verdict := usage.Decide(a.Policy.Windows, moment, a.st.Today,
 		time.Duration(a.Policy.WarnBeforeMinutes)*time.Minute)
+	verdict.ConsumedSecs = consumed
 
 	// Приложения из белого списка не блокируются никогда: ребёнок должен иметь
 	// возможность позвонить родителю при нулевом балансе.

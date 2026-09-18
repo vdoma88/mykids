@@ -19,5 +19,5 @@ func (stubDesktop) ForegroundProcess() (string, error) {
 func (stubDesktop) IdleTime() (time.Duration, error) { return 0, nil }
 func (stubDesktop) SessionLocked() bool              { return false }
 
-func newDesktop() agent.Desktop  { return stubDesktop{} }
+func newDesktop() agent.Desktop   { return stubDesktop{} }
 func newEnforcer() agent.Enforcer { return nil }

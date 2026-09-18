@@ -200,3 +200,76 @@ func TestFormatLeft(t *testing.T) {
 		}
 	}
 }
+
+func TestSetPolicyAppliesServerLimits(t *testing.T) {
+	a := newAgent(t, &fakeDesktop{proc: "game.exe"}, nil)
+	next := testPolicy()
+	next.DailyLimitMinutes = []int{5, 5, 5, 5, 5, 5, 5}
+
+	changed, err := a.SetPolicy(next)
+	if err != nil {
+		t.Fatalf("SetPolicy: %v", err)
+	}
+	if !changed {
+		t.Fatal("новая политика должна считаться изменением")
+	}
+	if a.Policy.LimitFor(1) != 5 {
+		t.Fatalf("лимит не применился: %d", a.Policy.LimitFor(1))
+	}
+}
+
+func TestSetPolicyIsQuietWhenNothingChanged(t *testing.T) {
+	// Пересборка учётчика сбрасывает точку отсчёта: следующий замер списал бы
+	// ноль. При обмене раз в минуту это дарило бы ребёнку время.
+	a := newAgent(t, &fakeDesktop{proc: "game.exe"}, nil)
+
+	base := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	if _, err := a.Tick(base); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	changed, err := a.SetPolicy(testPolicy())
+	if err != nil {
+		t.Fatalf("SetPolicy: %v", err)
+	}
+	if changed {
+		t.Fatal("та же политика не должна считаться изменением")
+	}
+
+	v, err := a.Tick(base.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if v.ConsumedSecs != 60 {
+		t.Fatalf("после пустой смены политики списано %d секунд вместо 60", v.ConsumedSecs)
+	}
+}
+
+func TestSetPolicyRejectsBadTimezone(t *testing.T) {
+	// Иначе агент принял бы политику, по которой не может посчитать сутки.
+	a := newAgent(t, &fakeDesktop{proc: "game.exe"}, nil)
+	bad := testPolicy()
+	bad.Timezone = "Нет/Такого"
+	if _, err := a.SetPolicy(bad); err == nil {
+		t.Fatal("неизвестный пояс должен быть ошибкой")
+	}
+	if a.Policy.Timezone == "Нет/Такого" {
+		t.Fatal("отклонённая политика не должна применяться")
+	}
+}
+
+func TestSetPolicyAppliesNewAllowlist(t *testing.T) {
+	// Белый список зашит в учётчик: без пересборки новый не подействовал бы.
+	a := newAgent(t, &fakeDesktop{proc: "phone.exe"}, nil)
+	if a.IsAllowlisted("phone.exe") {
+		t.Fatal("подготовка: процесс не должен быть в списке")
+	}
+	next := testPolicy()
+	next.AlwaysAllowed = []string{"phone.exe"}
+	if _, err := a.SetPolicy(next); err != nil {
+		t.Fatalf("SetPolicy: %v", err)
+	}
+	if !a.IsAllowlisted("phone.exe") {
+		t.Fatal("новый белый список не применился")
+	}
+}

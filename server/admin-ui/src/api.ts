@@ -79,6 +79,12 @@ export interface LedgerRow {
   refType: string | null; deviceId: string | null;
 }
 
+export interface TamperEvent {
+  id: string; kind: string; detail: string | null;
+  recordedAt: string; reviewedAt: string | null;
+  device: { name: string } | null;
+}
+
 export interface ScreenState {
   allowed: boolean; reason: string; window?: string; minutesLeft?: number;
 }
@@ -113,6 +119,14 @@ export const api = {
 
   ledger: (childId: string, limit = 100) =>
     asParent<{ balances: Balances; entries: LedgerRow[] }>(`/admin/children/${childId}/ledger?limit=${limit}`),
+
+  tampers: (childId: string) =>
+    asParent<{ pending: number; events: TamperEvent[] }>(`/admin/children/${childId}/tampers`),
+
+  reviewTampers: (childId: string, ids: string[]) =>
+    asParent<{ reviewed: number; pending: number }>(`/admin/children/${childId}/tampers/review`, {
+      method: 'POST', body: JSON.stringify({ ids }),
+    }),
 
   adjust: (childId: string, body: { currency: 'minutes' | 'credits'; amount: number; note: string }) =>
     asParent<{ balances: Balances }>(`/admin/children/${childId}/adjust`, {
