@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/vdoma88/mykids/agents/windows/internal/client"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 )
 
@@ -19,6 +21,22 @@ type State struct {
 	UncleanStops int `json:"uncleanStops"`
 	// Признак чистого завершения; сбрасывается при старте, ставится при выходе.
 	CleanShutdown bool `json:"cleanShutdown"`
+	// Остаток секунд, не набравший полной минуты для отправки на сервер.
+	// Без него перезапуск каждые полминуты обнулял бы расход.
+	PendingSeconds int `json:"pendingSeconds"`
+	// Поправка к системным часам и её происхождение. Переживает перезапуск:
+	// иначе перевод часов достаточно было бы дополнить остановкой агента.
+	ClockOffsetSeconds int  `json:"clockOffsetSeconds"`
+	ClockTrusted       bool `json:"clockTrusted"`
+	// Сколько раз замечена подкрутка часов. Растёт и уходит на сервер.
+	ClockTampers int `json:"clockTampers"`
+	// Когда агент последний раз сохранял состояние. По нему считается пропуск
+	// после нештатной остановки — иначе снять агента было бы выгодно.
+	LastSeenAt time.Time `json:"lastSeenAt"`
+	// Сообщения о вмешательстве, не дошедшие до сервера. Лежат здесь, а не в
+	// памяти: без этого хватило бы выдернуть сеть, снять агента и вернуть сеть
+	// обратно, чтобы родитель ничего не узнал.
+	PendingTampers []client.TamperEvent `json:"pendingTampers,omitempty"`
 }
 
 // Load читает состояние. Отсутствующий или битый файл — не повод падать:

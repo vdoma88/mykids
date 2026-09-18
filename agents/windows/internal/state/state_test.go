@@ -3,8 +3,11 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 
+	"github.com/vdoma88/mykids/agents/windows/internal/client"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 )
 
@@ -17,7 +20,15 @@ func TestLoadMissingFileIsEmpty(t *testing.T) {
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "state.json")
-	want := State{Today: usage.Day{Key: "2026-03-09", UsedSeconds: 120, GrantSeconds: 3600}, UncleanStops: 2}
+	seen := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	want := State{
+		Today:        usage.Day{Key: "2026-03-09", UsedSeconds: 120, GrantSeconds: 3600},
+		UncleanStops: 2,
+		LastSeenAt:   seen,
+		PendingTampers: []client.TamperEvent{
+			{Kind: "clock", Detail: "часы переведены назад на 3h0m0s", At: seen},
+		},
+	}
 	if err := Save(path, want); err != nil {
 		t.Fatalf("сохранение: %v", err)
 	}
@@ -25,8 +36,31 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("загрузка: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("получено %+v, ожидалось %+v", got, want)
+	}
+}
+
+func TestPendingTampersSurviveRestart(t *testing.T) {
+	// Иначе ребёнку хватило бы снять агента, чтобы стереть сообщение родителю.
+	path := filepath.Join(t.TempDir(), "state.json")
+	at := time.Date(2026, 3, 9, 21, 0, 0, 0, time.UTC)
+	err := Save(path, State{PendingTampers: []client.TamperEvent{
+		{Kind: "unclean_stop", Detail: "агент не работал 40m0s, списано 40 мин", At: at},
+	}})
+	if err != nil {
+		t.Fatalf("сохранение: %v", err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("загрузка: %v", err)
+	}
+	if len(got.PendingTampers) != 1 {
+		t.Fatalf("сообщение потеряно: %+v", got.PendingTampers)
+	}
+	if got.PendingTampers[0].Kind != "unclean_stop" || !got.PendingTampers[0].At.Equal(at) {
+		t.Fatalf("сообщение искажено: %+v", got.PendingTampers[0])
 	}
 }
 

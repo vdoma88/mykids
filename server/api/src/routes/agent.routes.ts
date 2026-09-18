@@ -18,12 +18,23 @@ export function registerAgentRoutes(app: FastifyInstance, s: Services): void {
   app.get('/agent/sync', async (req) => {
     const childId = req.device!.childId;
     await s.economy.ensureDailyGrant(childId, new Date());
-    const [policy, balances, screen] = await Promise.all([
+    const [policy, row, balances, screen] = await Promise.all([
       s.economy.policyFor(childId),
+      s.prisma.policy.findUniqueOrThrow({ where: { childId }, select: { alwaysAllowed: true } }),
       s.ledger.balances(childId),
       s.economy.screenState(childId, new Date()),
     ]);
-    return { serverTime: new Date().toISOString(), policy, balances, screen };
+    return {
+      serverTime: new Date().toISOString(),
+      policy,
+      // Белый список не входит в доменную схему политики, но нужен агенту:
+      // без него ребёнок не сможет позвонить родителю при нулевом балансе.
+      // Приходить он обязан с сервера, а не из локального файла, который
+      // ребёнок может отредактировать.
+      agent: { alwaysAllowed: row.alwaysAllowed },
+      balances,
+      screen,
+    };
   });
 
   /**
@@ -67,22 +78,33 @@ export function registerAgentRoutes(app: FastifyInstance, s: Services): void {
     };
   });
 
-  /** Событие вмешательства: остановка агента, отзыв разрешений. */
+  /**
+   * Событие вмешательства: перевод часов, остановка агента, отзыв разрешений.
+   *
+   * Пишется в отдельную таблицу, а не в журнал. Журнал хранит движение минут и
+   * кредитов, а событие само по себе ничего не списывает: величину штрафа
+   * решает родитель. К тому же журнал уникален по паре устройство+счётчик, и
+   * второе событие с того же устройства в него бы не поместилось — а часы
+   * ребёнок может переводить сколько угодно раз подряд.
+   */
   app.post('/agent/tamper', async (req, reply) => {
     const body = z.object({
       kind: z.string().min(1).max(60),
       detail: z.string().max(300).optional(),
+      // Время события по часам устройства. Необязательно: старый агент его не
+      // шлёт, а отказывать ему значило бы потерять сообщение целиком.
+      at: z.string().datetime().optional(),
     }).parse(req.body);
 
-    await s.prisma.ledgerEntry.create({
+    const event = await s.prisma.tamperEvent.create({
       data: {
-        childId: req.device!.childId, currency: 'minutes', amount: 0,
-        reason: 'tamper_penalty', refType: 'tamper', refId: body.kind,
-        deviceId: req.device!.id, occurredAt: new Date(), seq: 0,
-        note: body.detail ?? null,
+        childId: req.device!.childId,
+        deviceId: req.device!.id,
+        kind: body.kind,
+        detail: body.detail ?? null,
+        occurredAt: body.at ? new Date(body.at) : null,
       },
     });
-    // Величину штрафа решает родитель через политику; пока только фиксируем факт.
-    return reply.status(201).send({ recorded: true });
+    return reply.status(201).send({ recorded: true, id: event.id });
   });
 }

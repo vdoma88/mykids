@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Policy, TimeWindow } from '@mykids/contracts';
 import { convertCredits } from '@mykids/domain';
-import { api, type Me } from '../api.js';
+import { api, type Me, type TamperEvent } from '../api.js';
 import { ErrorBox, Loading, useAsync } from '../components/Async.js';
 
 const DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -114,12 +114,93 @@ function WindowsEditor({
   );
 }
 
+/** Задержка доставки, которую стоит показать отдельной строкой. */
+function delivered(occurredAt: string, recordedAt: string): boolean {
+  return new Date(recordedAt).getTime() - new Date(occurredAt).getTime() > 5 * 60 * 1000;
+}
+
+const TAMPER_KINDS: Record<string, string> = {
+  clock: 'переведены системные часы',
+  unclean_stop: 'агент остановлен нештатно',
+  permissions: 'отозваны разрешения агента',
+};
+
+/**
+ * События вмешательства.
+ *
+ * Отдельно от журнала операций: там движение минут и кредитов, а здесь факты,
+ * которые сами по себе ничего не списывают. Решение — наказывать или нет —
+ * остаётся за родителем, поэтому единственное действие тут «разобрал».
+ */
+function TamperLog({ childId, query, readOnly }: {
+  childId: string;
+  query: ReturnType<typeof useAsync<{ pending: number; events: TamperEvent[] }>>;
+  readOnly: boolean;
+}): JSX.Element | null {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Пустой список не показываем: у большинства семей он будет пустым всегда,
+  // и постоянный «0 событий» приучил бы не замечать этот блок.
+  if (!query.data || query.data.events.length === 0) return null;
+  const { pending, events } = query.data;
+
+  return (
+    <div className="card">
+      <h3>Вмешательство в агент{pending > 0 ? ` — ${pending} неразобранных` : ''}</h3>
+      <ErrorBox message={err ?? query.error} />
+      <table>
+        <thead>
+          <tr><th>Когда</th><th>Устройство</th><th>Что случилось</th><th /></tr>
+        </thead>
+        <tbody>
+          {events.map((e) => (
+            <tr key={e.id} style={{ opacity: e.reviewedAt ? 0.5 : 1 }}>
+              <td className="note">
+                {new Date(e.occurredAt ?? e.recordedAt).toLocaleString('ru-RU')}
+                {/* Сообщение могло пролежать в офлайне: тогда момент доставки
+                    отличается от момента события, и это стоит показать. */}
+                {e.occurredAt && delivered(e.occurredAt, e.recordedAt) && (
+                  <div>доставлено {new Date(e.recordedAt).toLocaleString('ru-RU')}</div>
+                )}
+              </td>
+              <td>{e.device?.name ?? '—'}</td>
+              <td>
+                {TAMPER_KINDS[e.kind] ?? e.kind}
+                {e.detail && <span className="note"> — {e.detail}</span>}
+              </td>
+              <td className="note">{e.reviewedAt ? 'разобрано' : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!readOnly && pending > 0 && (
+        <button type="button" disabled={busy} style={{ marginTop: 12 }} onClick={() => {
+          setBusy(true);
+          setErr(null);
+          void api.reviewTampers(childId, events.filter((e) => !e.reviewedAt).map((e) => e.id))
+            .then(() => query.reload())
+            .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)))
+            .finally(() => setBusy(false));
+        }}>Отметить разобранными</button>
+      )}
+      <p className="note" style={{ marginTop: 8 }}>
+        Само событие минут не списывает — кроме одного случая: после нештатной остановки
+        агент оплачивает пропущенное время сам, и в описании написано сколько. Отличить
+        сбой питания от снятия агента он не может, поэтому если это была не попытка
+        схитрить — верните время ручной корректировкой на ту же величину.
+      </p>
+    </div>
+  );
+}
+
 export function ChildPage({ me }: { me: Me }): JSX.Element {
   const { childId = '' } = useParams();
   const readOnly = me.role === 'viewer';
 
   const policyQ = useAsync(() => api.policy(childId), [childId]);
   const ledgerQ = useAsync(() => api.ledger(childId), [childId]);
+  const tamperQ = useAsync(() => api.tampers(childId), [childId]);
 
   const [draft, setDraft] = useState<Policy | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -345,6 +426,8 @@ export function ChildPage({ me }: { me: Me }): JSX.Element {
           )}
         </div>
       )}
+
+      <TamperLog childId={childId} query={tamperQ} readOnly={readOnly} />
 
       <div className="card">
         <h3>Журнал операций</h3>

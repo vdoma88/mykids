@@ -168,3 +168,65 @@ func TestDecide(t *testing.T) {
 		t.Errorf("не предупредили за 2 минуты до конца: %+v", v)
 	}
 }
+
+func TestChargeGapMakesKillingAgentPointless(t *testing.T) {
+	// Ребёнок снял агента на полчаса и играл. Пропуск обязан быть оплачен.
+	day := Day{Key: "2026-09-18", GrantSeconds: 3600}
+	charged := ChargeGap(&day, 30*time.Minute)
+
+	if charged != 1800 {
+		t.Fatalf("списано %d секунд вместо 1800", charged)
+	}
+	if day.UsedSeconds != 1800 || day.Remaining() != 1800 {
+		t.Fatalf("учёт после списания: потрачено %d, осталось %d", day.UsedSeconds, day.Remaining())
+	}
+}
+
+func TestChargeGapCappedByDailyGrant(t *testing.T) {
+	// Агент не работал сутки. Обнулить сегодняшний день — да, уйти в долг на
+	// неделю вперёд из-за одного сбоя питания — нет.
+	day := Day{Key: "2026-09-18", GrantSeconds: 3600}
+	charged := ChargeGap(&day, 24*time.Hour)
+
+	if charged != 3600 {
+		t.Fatalf("списано %d секунд вместо 3600", charged)
+	}
+	if day.Remaining() != 0 {
+		t.Fatalf("остаток должен обнулиться, получено %d", day.Remaining())
+	}
+}
+
+func TestChargeGapKeepsAlreadySpent(t *testing.T) {
+	// Пропуск добавляется к уже потраченному, а не заменяет его.
+	day := Day{Key: "2026-09-18", GrantSeconds: 3600, UsedSeconds: 600}
+	if charged := ChargeGap(&day, 10*time.Minute); charged != 600 {
+		t.Fatalf("списано %d вместо 600", charged)
+	}
+	if day.UsedSeconds != 1200 {
+		t.Fatalf("потрачено %d вместо 1200", day.UsedSeconds)
+	}
+}
+
+func TestChargeGapIgnoresNonPositive(t *testing.T) {
+	// Часы могли прыгнуть назад: отрицательный пропуск не повод дарить время.
+	for _, gap := range []time.Duration{0, -time.Hour} {
+		day := Day{Key: "2026-09-18", GrantSeconds: 3600, UsedSeconds: 600}
+		if charged := ChargeGap(&day, gap); charged != 0 {
+			t.Fatalf("пропуск %v списал %d секунд", gap, charged)
+		}
+		if day.UsedSeconds != 600 {
+			t.Fatalf("пропуск %v изменил учёт: %d", gap, day.UsedSeconds)
+		}
+	}
+}
+
+func TestChargeGapWithoutGrantChargesNothing(t *testing.T) {
+	// Выдачи ещё не было — списывать не из чего, и уходить в минус незачем.
+	day := Day{Key: "2026-09-18"}
+	if charged := ChargeGap(&day, time.Hour); charged != 0 {
+		t.Fatalf("списано %d при нулевой выдаче", charged)
+	}
+	if day.UsedSeconds != 0 {
+		t.Fatalf("учёт изменён: %d", day.UsedSeconds)
+	}
+}

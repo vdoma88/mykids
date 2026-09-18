@@ -66,13 +66,14 @@ model Child {
   birthYear Int?
   createdAt DateTime @default(now())
 
-  family      Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  family      Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
   devices     Device[]
   ledger      LedgerEntry[]
   policy      Policy?
   purchases   Purchase[]
   attempts    Attempt[]
   assignments PackAssignment[]
+  tampers     TamperEvent[]
 
   @@index([familyId])
 }
@@ -84,39 +85,40 @@ enum Platform {
 }
 
 model Device {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   childId      String
   platform     Platform
   name         String
   // Токен устройства хранится только хешем: утечка базы не должна давать
   // возможность выдать себя за агента.
-  tokenHash    String   @unique
+  tokenHash    String    @unique
   agentVersion String?
   lastSeenAt   DateTime?
   revokedAt    DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
-  child  Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
-  ledger LedgerEntry[]
+  child   Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  ledger  LedgerEntry[]
+  tampers TamperEvent[]
 
   @@index([childId])
 }
 
 model Policy {
-  id                  String   @id @default(uuid())
-  childId             String   @unique
-  timezone            String   @default("Europe/Moscow")
+  id                        String   @id @default(uuid())
+  childId                   String   @unique
+  timezone                  String   @default("Europe/Moscow")
   // Индекс 0 — воскресенье, как в Date.getDay().
-  dailyLimitMinutes   Int[]
-  carryOverMaxMinutes Int      @default(30)
+  dailyLimitMinutes         Int[]
+  carryOverMaxMinutes       Int      @default(30)
   // Окна расписания: форма проверяется zod-схемой на границе API.
-  windows             Json     @default("[]")
-  alwaysAllowed       String[] @default([])
+  windows                   Json     @default("[]")
+  alwaysAllowed             String[] @default([])
   // Экономика
-  creditsPerMinute          Int @default(2)
-  maxConvertedMinutesPerDay Int @default(45)
-  minCreditsToConvert       Int @default(10)
-  maxCreditsPerDay          Int @default(120)
+  creditsPerMinute          Int      @default(2)
+  maxConvertedMinutesPerDay Int      @default(45)
+  minCreditsToConvert       Int      @default(10)
+  maxCreditsPerDay          Int      @default(120)
   updatedAt                 DateTime @updatedAt
 
   child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
@@ -143,22 +145,22 @@ enum LedgerReason {
 
 /// Журнал операций. Только вставка: строки не изменяются и не удаляются.
 model LedgerEntry {
-  id       String       @id @default(uuid())
-  childId  String
-  currency Currency
+  id         String       @id @default(uuid())
+  childId    String
+  currency   Currency
   /// Целое со знаком. Минуты и кредиты не дробятся — это исключает
   /// эксплойты округления при обмене.
-  amount   Int
-  reason   LedgerReason
-  refType  String?
-  refId    String?
-  deviceId String?
+  amount     Int
+  reason     LedgerReason
+  refType    String?
+  refId      String?
+  deviceId   String?
   /// Часы устройства. Могут быть подкручены — суточные лимиты по ним не считаются.
   occurredAt DateTime
   /// Часы сервера. Источник истины для суточных окон.
-  recordedAt DateTime @default(now())
+  recordedAt DateTime     @default(now())
   /// Монотонный счётчик устройства: ловит переупорядочивание и дубли.
-  seq        Int      @default(0)
+  seq        Int          @default(0)
   note       String?
 
   child  Child   @relation(fields: [childId], references: [id], onDelete: Cascade)
@@ -234,17 +236,17 @@ enum AttemptStatus {
 }
 
 model Attempt {
-  id       String        @id @default(uuid())
-  childId  String
-  packId   String
-  itemId   String
+  id        String        @id @default(uuid())
+  childId   String
+  packId    String
+  itemId    String
   /// Доля верности 0..1.
-  score    Float
-  status   AttemptStatus @default(graded)
+  score     Float
+  status    AttemptStatus @default(graded)
   /// Начисленные кредиты; 0, если урезаны лимитами или ждут подтверждения.
-  credits  Int           @default(0)
-  answer   Json?
-  createdAt DateTime     @default(now())
+  credits   Int           @default(0)
+  answer    Json?
+  createdAt DateTime      @default(now())
   decidedAt DateTime?
 
   child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
@@ -252,4 +254,35 @@ model Attempt {
   @@index([childId, createdAt])
   @@index([childId, itemId, createdAt])
   @@index([childId, packId, createdAt])
+}
+
+/// Попытка вмешаться в работу агента: перевод часов, нештатная остановка,
+/// отзыв разрешений.
+///
+/// Отдельная таблица, а не запись в журнале: журнал хранит движение минут и
+/// кредитов, а событие вмешательства само по себе ничего не списывает —
+/// величину штрафа решает родитель. Вдобавок журнал уникален по паре
+/// устройство+счётчик, и второе событие с того же устройства в него просто не
+/// поместилось бы.
+model TamperEvent {
+  id         String    @id @default(uuid())
+  childId    String
+  deviceId   String?
+  /// Вид события: clock, unclean_stop, permissions.
+  kind       String
+  detail     String?
+  /// Часы устройства: когда событие случилось. Им верить нельзя — событие как
+  /// раз и может быть о переводе этих часов, — но без них у пролежавшего
+  /// неделю в офлайне сообщения виден только момент доставки.
+  occurredAt DateTime?
+  /// Часы сервера: момент доставки. Источник истины для порядка событий.
+  recordedAt DateTime  @default(now())
+  /// Когда родитель разобрал событие. Пока пусто — висит непрочитанным.
+  reviewedAt DateTime?
+
+  child  Child   @relation(fields: [childId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([childId, recordedAt])
+  @@index([childId, reviewedAt])
 }
