@@ -56,5 +56,8 @@ DEVICE_TOKEN=$(curl -fsS -X POST "$BASE/admin/children/$CHILD/devices" \
 
 echo "сервер: $BASE, ребёнок: $CHILD"
 
+# Токен родителя тоже отдаём тестам: половину проверок имеет смысл делать с той
+# стороны, где всё это и должно быть видно — на странице родителя.
 MYKIDS_SERVER="$BASE" MYKIDS_DEVICE_TOKEN="$DEVICE_TOKEN" \
+MYKIDS_PARENT_TOKEN="$TOKEN" MYKIDS_CHILD_ID="$CHILD" \
   go test -tags integration -count=1 -v ./test/ "$@"

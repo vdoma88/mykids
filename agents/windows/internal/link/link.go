@@ -22,6 +22,10 @@ import (
 // При минутном шаге это больше суток непрерывного экрана.
 const MaxQueue = 2000
 
+// MaxTampers — сколько сообщений о вмешательстве копим без связи. Больше и не
+// нужно: родителю важен факт и первые случаи, а не сотый подряд.
+const MaxTampers = 50
+
 // Link — состояние связи с сервером.
 type Link struct {
 	client    *client.Client
@@ -33,6 +37,9 @@ type Link struct {
 	// минуты: сервер считает минутами, а дробить их значит копить ошибку
 	// округления в пользу ребёнка.
 	pending int
+
+	// Сообщения о вмешательстве, ещё не принятые сервером.
+	tampers []client.TamperEvent
 }
 
 // New собирает связь.
@@ -53,6 +60,51 @@ func (l *Link) SetPending(seconds int) {
 
 // Queued — сколько минут ждёт отправки.
 func (l *Link) Queued() int { return l.box.Total() }
+
+// Tampers возвращает копию очереди сообщений о вмешательстве — её вызывающий
+// кладёт в файл состояния.
+func (l *Link) Tampers() []client.TamperEvent {
+	out := make([]client.TamperEvent, len(l.tampers))
+	copy(out, l.tampers)
+	return out
+}
+
+// SetTampers восстанавливает очередь из сохранённого состояния.
+func (l *Link) SetTampers(events []client.TamperEvent) {
+	l.tampers = append(l.tampers[:0], events...)
+	l.trimTampers()
+}
+
+// QueueTamper ставит сообщение в очередь. Отправка — в ближайшем Sync.
+func (l *Link) QueueTamper(kind, detail string, at time.Time) {
+	l.tampers = append(l.tampers, client.TamperEvent{Kind: kind, Detail: detail, At: at})
+	l.trimTampers()
+}
+
+// trimTampers отбрасывает самые старые сверх предела. Именно старые: если
+// ребёнок завалил очередь однотипными событиями, свежие важнее.
+func (l *Link) trimTampers() {
+	if len(l.tampers) > MaxTampers {
+		l.tampers = append(l.tampers[:0], l.tampers[len(l.tampers)-MaxTampers:]...)
+	}
+}
+
+// flushTampers отдаёт накопленные сообщения. Неотправленные остаются ждать.
+func (l *Link) flushTampers(ctx context.Context) error {
+	for len(l.tampers) > 0 {
+		if err := l.client.ReportTamper(ctx, l.tampers[0]); err != nil {
+			if client.IsOffline(err) {
+				return nil // связь оборвалась — очередь ждёт дальше
+			}
+			// Сервер отверг само сообщение. Держать его вечно нельзя: оно
+			// заблокировало бы все следующие.
+			l.tampers = l.tampers[1:]
+			return err
+		}
+		l.tampers = l.tampers[1:]
+	}
+	return nil
+}
 
 // Record копит израсходованные секунды и ставит целые минуты в очередь.
 func (l *Link) Record(seconds int, at time.Time) error {
@@ -141,6 +193,9 @@ func (l *Link) Sync(ctx context.Context, r clock.Reading, local config.Policy) (
 			out.Note = err.Error()
 		}
 	}
+	if err := l.flushTampers(ctx); err != nil && out.Note == "" {
+		out.Note = err.Error()
+	}
 	return out, nil
 }
 
@@ -189,16 +244,15 @@ func (l *Link) flush(ctx context.Context, out *Result) error {
 	return nil
 }
 
-// Observe проверяет часы и, если их переставили, сообщает серверу.
-func (l *Link) Observe(ctx context.Context, r clock.Reading) (clock.Jump, bool) {
+// Observe проверяет часы и, если их переставили, ставит сообщение в очередь.
+//
+// Отправляем не сразу: связи может не быть именно потому, что её отключили
+// перед переводом часов. Само сообщение при этом уже не потеряется.
+func (l *Link) Observe(r clock.Reading) (clock.Jump, bool) {
 	jump, tampered := l.clk.Observe(r)
 	if !tampered {
 		return jump, false
 	}
-	if l.client.Configured() {
-		// Ошибку не поднимаем: сервер мог быть недоступен, а сама компенсация
-		// уже применена и важнее уведомления.
-		_ = l.client.ReportTamper(ctx, "clock", jump.String())
-	}
+	l.QueueTamper("clock", jump.String(), jump.At)
 	return jump, true
 }

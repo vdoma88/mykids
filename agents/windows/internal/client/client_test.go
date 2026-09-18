@@ -261,7 +261,7 @@ func TestPushUsageEmptySkipsRequest(t *testing.T) {
 }
 
 func TestReportTamper(t *testing.T) {
-	var body struct{ Kind, Detail string }
+	var body TamperEvent
 	var path string
 	c := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
@@ -269,7 +269,10 @@ func TestReportTamper(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	if err := c.ReportTamper(ctx(t), "clock", "часы сдвинуты на -3ч"); err != nil {
+	at := time.Date(2026, 9, 18, 21, 30, 0, 0, time.UTC)
+	if err := c.ReportTamper(ctx(t), TamperEvent{
+		Kind: "clock", Detail: "часы сдвинуты на -3ч", At: at,
+	}); err != nil {
 		t.Fatalf("ReportTamper: %v", err)
 	}
 	if path != "/agent/tamper" {
@@ -277,6 +280,11 @@ func TestReportTamper(t *testing.T) {
 	}
 	if body.Kind != "clock" || !strings.Contains(body.Detail, "-3ч") {
 		t.Fatalf("сообщение о вмешательстве передано неверно: %+v", body)
+	}
+	// Время события нужно родителю: без него в списке будет только момент
+	// доставки, который после недели офлайна ничего не скажет.
+	if !body.At.Equal(at) {
+		t.Fatalf("время события потеряно: %v", body.At)
 	}
 }
 

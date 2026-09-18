@@ -91,6 +91,9 @@ export function registerAgentRoutes(app: FastifyInstance, s: Services): void {
     const body = z.object({
       kind: z.string().min(1).max(60),
       detail: z.string().max(300).optional(),
+      // Время события по часам устройства. Необязательно: старый агент его не
+      // шлёт, а отказывать ему значило бы потерять сообщение целиком.
+      at: z.string().datetime().optional(),
     }).parse(req.body);
 
     const event = await s.prisma.tamperEvent.create({
@@ -99,6 +102,7 @@ export function registerAgentRoutes(app: FastifyInstance, s: Services): void {
         deviceId: req.device!.id,
         kind: body.kind,
         detail: body.detail ?? null,
+        occurredAt: body.at ? new Date(body.at) : null,
       },
     });
     return reply.status(201).send({ recorded: true, id: event.id });

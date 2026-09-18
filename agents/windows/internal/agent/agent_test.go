@@ -273,3 +273,137 @@ func TestSetPolicyAppliesNewAllowlist(t *testing.T) {
 		t.Fatal("новый белый список не применился")
 	}
 }
+
+// agentWith собирает агента с заранее заданным состоянием — так проверяется
+// то, что случилось до запуска.
+func agentWith(t *testing.T, st state.State) *Agent {
+	t.Helper()
+	a, err := New(testPolicy(), &fakeDesktop{proc: "game.exe"}, nil, st)
+	if err != nil {
+		t.Fatalf("создание агента: %v", err)
+	}
+	return a
+}
+
+func TestRecoverChargesGapAfterKill(t *testing.T) {
+	// Ребёнок снял агента в 12:00 и запустил обратно в 12:40, поиграв сорок
+	// минут без учёта. Пропуск обязан быть оплачен, иначе снимать агента выгодно.
+	killed := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{LastSeenAt: killed})
+
+	r := a.RecoverUnclean(killed.Add(40 * time.Minute))
+	if !r.Unclean {
+		t.Fatal("нештатная остановка не распознана")
+	}
+	if r.ChargedSecs != 2400 {
+		t.Fatalf("списано %d секунд вместо 2400", r.ChargedSecs)
+	}
+	if got := a.State().Today.Remaining(); got != 1200 {
+		t.Fatalf("остаток %d вместо 1200", got)
+	}
+	if a.State().UncleanStops != 1 {
+		t.Fatalf("счётчик остановок: %d", a.State().UncleanStops)
+	}
+}
+
+func TestRecoverQuietAfterCleanShutdown(t *testing.T) {
+	// Штатная остановка — выключенный на ночь компьютер. Списывать нечего.
+	stopped := time.Date(2026, 3, 8, 22, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{CleanShutdown: true, LastSeenAt: stopped})
+
+	r := a.RecoverUnclean(stopped.Add(10 * time.Hour))
+	if r.Unclean || r.ChargedSecs != 0 {
+		t.Fatalf("штатная остановка не должна ничего списывать: %+v", r)
+	}
+	if a.State().UncleanStops != 0 {
+		t.Fatalf("счётчик остановок вырос: %d", a.State().UncleanStops)
+	}
+}
+
+func TestRecoverQuietOnFirstEverStart(t *testing.T) {
+	// Первый запуск: сравнивать не с чем, и наказывать не за что.
+	a := agentWith(t, state.State{})
+	if r := a.RecoverUnclean(time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)); r.Unclean {
+		t.Fatalf("первый запуск принят за нештатную остановку: %+v", r)
+	}
+}
+
+func TestRecoverCappedByDailyGrant(t *testing.T) {
+	// Агента не было сутки. Обнулить сегодняшний день — да, загнать в долг на
+	// неделю вперёд из-за сбоя питания — нет.
+	killed := time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{LastSeenAt: killed})
+
+	r := a.RecoverUnclean(killed.Add(24 * time.Hour))
+	if r.ChargedSecs != 3600 {
+		t.Fatalf("списано %d вместо дневной выдачи 3600", r.ChargedSecs)
+	}
+	if got := a.State().Today.Remaining(); got != 0 {
+		t.Fatalf("остаток %d вместо нуля", got)
+	}
+}
+
+func TestRecoverThenTickKeepsCharge(t *testing.T) {
+	// Списание не должно потеряться при первом же тике: Grant идемпотентен,
+	// а Rollover не должен сработать второй раз и обнулить день.
+	killed := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{LastSeenAt: killed})
+	a.RecoverUnclean(killed.Add(30 * time.Minute))
+
+	v, err := a.Tick(killed.Add(30 * time.Minute))
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if v.LeftSecs != 1800 {
+		t.Fatalf("после списания осталось %d вместо 1800", v.LeftSecs)
+	}
+}
+
+func TestRecoverIgnoresBackwardClock(t *testing.T) {
+	// Часы перевели назад — пропуск получился отрицательным. Дарить время за это нельзя.
+	killed := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{LastSeenAt: killed})
+
+	r := a.RecoverUnclean(killed.Add(-2 * time.Hour))
+	if r.ChargedSecs != 0 {
+		t.Fatalf("отрицательный пропуск списал %d секунд", r.ChargedSecs)
+	}
+	if a.State().Today.UsedSeconds != 0 {
+		t.Fatalf("учёт изменён: %d", a.State().Today.UsedSeconds)
+	}
+}
+
+func TestPendingRecoveryChangesNothing(t *testing.T) {
+	// Диагностика обязана быть безвредной: списать пропуск и не сохранить
+	// состояние значило бы списать его второй раз при следующем запуске.
+	killed := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{LastSeenAt: killed})
+	now := killed.Add(30 * time.Minute)
+
+	r := a.PendingRecovery(now)
+	if !r.Unclean || r.ChargedSecs != 1800 {
+		t.Fatalf("диагностика посчитала неверно: %+v", r)
+	}
+
+	st := a.State()
+	if st.Today.UsedSeconds != 0 || st.Today.Key != "" || st.UncleanStops != 0 {
+		t.Fatalf("диагностика изменила состояние: %+v", st)
+	}
+
+	// А настоящее восстановление после неё обязано списать ровно столько же.
+	applied := a.RecoverUnclean(now)
+	if applied.ChargedSecs != r.ChargedSecs {
+		t.Fatalf("списано %d, а обещано было %d", applied.ChargedSecs, r.ChargedSecs)
+	}
+	if a.State().Today.UsedSeconds != 1800 {
+		t.Fatalf("настоящее списание не применилось: %d", a.State().Today.UsedSeconds)
+	}
+}
+
+func TestPendingRecoveryQuietAfterCleanShutdown(t *testing.T) {
+	stopped := time.Date(2026, 3, 8, 22, 0, 0, 0, time.UTC)
+	a := agentWith(t, state.State{CleanShutdown: true, LastSeenAt: stopped})
+	if r := a.PendingRecovery(stopped.Add(10 * time.Hour)); r.Unclean {
+		t.Fatalf("штатная остановка показана как нештатная: %+v", r)
+	}
+}

@@ -205,13 +205,20 @@ func (c *Client) PushUsage(ctx context.Context, entries []UsageEntry) (*UsageRes
 	return &out, nil
 }
 
+// TamperEvent — сообщение о вмешательстве.
+//
+// Тип вынесен наружу, потому что событие переживает перезапуск: без связи оно
+// ждёт в файле состояния. Иначе ребёнку достаточно было бы выдернуть сеть,
+// снять агента и вернуть сеть обратно — родитель не узнал бы ничего.
+type TamperEvent struct {
+	Kind   string    `json:"kind"`
+	Detail string    `json:"detail,omitempty"`
+	At     time.Time `json:"at"`
+}
+
 // ReportTamper сообщает о вмешательстве: остановке агента, подкрутке часов.
-func (c *Client) ReportTamper(ctx context.Context, kind, detail string) error {
-	payload := struct {
-		Kind   string `json:"kind"`
-		Detail string `json:"detail,omitempty"`
-	}{Kind: kind, Detail: detail}
-	return c.do(ctx, http.MethodPost, "/agent/tamper", payload, nil)
+func (c *Client) ReportTamper(ctx context.Context, e TamperEvent) error {
+	return c.do(ctx, http.MethodPost, "/agent/tamper", e, nil)
 }
 
 // IsOffline отличает временную недоступность от отказа в доступе.

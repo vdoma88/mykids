@@ -81,6 +81,9 @@ export interface LedgerRow {
 
 export interface TamperEvent {
   id: string; kind: string; detail: string | null;
+  /// Часы устройства: когда событие случилось. Может отсутствовать.
+  occurredAt: string | null;
+  /// Часы сервера: когда сообщение дошло.
   recordedAt: string; reviewedAt: string | null;
   device: { name: string } | null;
 }

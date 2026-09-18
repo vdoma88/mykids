@@ -11,6 +11,10 @@ package test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,9 +47,23 @@ func newClient(t *testing.T) *client.Client {
 func newLink(t *testing.T) (*link.Link, *clock.Clock, *outbox.Outbox, string) {
 	t.Helper()
 	dir := t.TempDir()
-	box, err := outbox.Open(filepath.Join(dir, "outbox.jsonl"))
+	path := filepath.Join(dir, "outbox.jsonl")
+
+	// Каждый тест берёт свежую очередь, а счётчик в ней начинается с единицы —
+	// и сервер справедливо считает такие записи повторами предыдущего теста.
+	// На настоящем устройстве очередь одна и счётчик не откатывается, поэтому
+	// задаём тесту свой диапазон, а не ослабляем проверку на сервере.
+	seed := fmt.Sprintf(`{"seq":%d,"minutes":1,"occurredAt":%q}`+"\n",
+		time.Now().UnixNano()%1_000_000_000, time.Now().Format(time.RFC3339))
+	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
+		t.Fatalf("подготовка очереди: %v", err)
+	}
+	box, err := outbox.Open(path)
 	if err != nil {
 		t.Fatalf("outbox.Open: %v", err)
+	}
+	if err := box.Ack(box.Pending()); err != nil {
+		t.Fatalf("подготовка очереди: %v", err)
 	}
 	clk := clock.New(0)
 	cache := filepath.Join(dir, "policy-cache.json")
@@ -236,9 +254,121 @@ func TestOfflineFallsBackToCacheNotLocalFile(t *testing.T) {
 func TestTamperIsAcceptedRepeatedly(t *testing.T) {
 	c := newClient(t)
 	for i := 0; i < 3; i++ {
-		if err := c.ReportTamper(ctx(t), "clock", "системные часы переведены назад на 3h0m0s"); err != nil {
+		err := c.ReportTamper(ctx(t), client.TamperEvent{
+			Kind:   "clock",
+			Detail: "системные часы переведены назад на 3h0m0s",
+			At:     time.Now(),
+		})
+		if err != nil {
 			t.Fatalf("сообщение %d отклонено: %v", i+1, err)
 		}
+	}
+}
+
+// tamperEvent — событие вмешательства глазами родителя.
+type tamperEvent struct {
+	Kind       string     `json:"kind"`
+	Detail     string     `json:"detail"`
+	OccurredAt *time.Time `json:"occurredAt"`
+	ReviewedAt *time.Time `json:"reviewedAt"`
+}
+
+// asParent читает страницу ребёнка тем же REST, которым пользуется админка.
+func asParent(t *testing.T, path string, out any) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx(t), http.MethodGet,
+		env(t, "MYKIDS_SERVER")+path, nil)
+	if err != nil {
+		t.Fatalf("запрос: %v", err)
+	}
+	req.Header.Set("authorization", "Bearer "+env(t, "MYKIDS_PARENT_TOKEN"))
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("запрос родителя: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
+		t.Fatalf("родитель получил %d: %s", res.StatusCode, body)
+	}
+	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
+		t.Fatalf("разбор ответа: %v", err)
+	}
+}
+
+// TestQueuedTamperReachesParent — главная проверка: ребёнок выдёргивает сеть,
+// снимает агента и возвращает сеть обратно. Родитель обязан всё равно узнать.
+func TestQueuedTamperReachesParent(t *testing.T) {
+	lnk, _, _, _ := newLink(t)
+	if _, err := lnk.Sync(ctx(t), reading(), config.Default()); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	// Событие случилось час назад, пока сети не было.
+	happened := time.Now().Add(-time.Hour).Truncate(time.Second)
+	mark := "проверка доставки " + happened.Format(time.RFC3339Nano)
+	lnk.QueueTamper("unclean_stop", mark, happened)
+
+	if _, err := lnk.Sync(ctx(t), reading(), config.Default()); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if n := len(lnk.Tampers()); n != 0 {
+		t.Fatalf("сообщение осталось в очереди: %d", n)
+	}
+
+	var page struct {
+		Pending int           `json:"pending"`
+		Events  []tamperEvent `json:"events"`
+	}
+	asParent(t, "/admin/children/"+env(t, "MYKIDS_CHILD_ID")+"/tampers", &page)
+
+	var found *tamperEvent
+	for i := range page.Events {
+		if page.Events[i].Detail == mark {
+			found = &page.Events[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("родитель не увидел сообщение, всего событий %d", len(page.Events))
+	}
+	if found.Kind != "unclean_stop" {
+		t.Fatalf("вид события искажён: %q", found.Kind)
+	}
+	// Время события, а не доставки: иначе после недели офлайна родитель увидел
+	// бы только момент, когда агент дозвонился.
+	if found.OccurredAt == nil || !found.OccurredAt.Equal(happened) {
+		t.Fatalf("время события потеряно: %v вместо %v", found.OccurredAt, happened)
+	}
+	if found.ReviewedAt != nil {
+		t.Fatal("новое событие не может быть уже разобранным")
+	}
+	if page.Pending == 0 {
+		t.Fatal("счётчик неразобранных не вырос")
+	}
+}
+
+// TestGapChargeReachesServer — пропуск после снятия агента должен списаться и
+// на сервере, а не только в локальном файле, который ребёнок может удалить.
+func TestGapChargeReachesServer(t *testing.T) {
+	lnk, _, _, _ := newLink(t)
+	before, err := newClient(t).Sync(ctx(t))
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	// Ровно то, что делает агент, обнаружив нештатную остановку.
+	if err := lnk.Record(10*60, time.Now()); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	res, err := lnk.Sync(ctx(t), reading(), config.Default())
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if want := before.Balances.Minutes - 10; res.Balances.Minutes != want {
+		t.Fatalf("остаток %d вместо %d: пропуск не списан на сервере",
+			res.Balances.Minutes, want)
 	}
 }
 

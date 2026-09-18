@@ -31,7 +31,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 // syncEvery — как часто агент ходит на сервер. Реже, чем опрашивает рабочий
 // стол: расписание меняется редко, а расход всё равно копится в очереди.
@@ -151,12 +151,8 @@ func run(cmd string, o options) error {
 		fmt.Fprintf(os.Stderr, "предупреждение: %v — состояние сброшено\n", err)
 		st = state.State{}
 	}
-	if !st.CleanShutdown && st.Today.Key != "" {
-		// Прошлый запуск не завершился штатно. Это может быть и сбой питания,
-		// и попытка снять агента, поэтому просто считаем.
-		st.UncleanStops++
-	}
-	st.CleanShutdown = false
+	// Нештатную остановку разбирает уже сам агент: ему нужна политика, чтобы
+	// знать дневную выдачу, от которой считается ограничение списания.
 
 	box, err := outbox.Open(p.outbox)
 	if err != nil {
@@ -167,6 +163,7 @@ func run(cmd string, o options) error {
 	clk.SetOffset(time.Duration(st.ClockOffsetSeconds)*time.Second, st.ClockTrusted)
 	lnk := link.New(client.New(enrollment.ServerURL, enrollment.DeviceToken, version), box, clk, p.cache)
 	lnk.SetPending(st.PendingSeconds)
+	lnk.SetTampers(st.PendingTampers)
 
 	// Политика действующая, а не локальная: кэш серверной выигрывает у файла,
 	// который ребёнку доступен на запись.
@@ -208,6 +205,36 @@ func enroll(path, server, token string) error {
 	return nil
 }
 
+// recover разбирает последствия нештатной остановки: оплачивает пропуск и
+// ставит сообщение родителю в очередь.
+//
+// Пропуск уходит в ту же очередь расхода, что и обычное время: иначе списание
+// осталось бы только в локальном файле, который ребёнок может удалить.
+func recoverUnclean(a *agent.Agent, lnk *link.Link, now time.Time) agent.Recovery {
+	r := a.RecoverUnclean(now)
+	if !r.Unclean {
+		return r
+	}
+	if r.ChargedSecs > 0 {
+		if err := lnk.Record(r.ChargedSecs, now); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+		}
+	}
+	lnk.QueueTamper("unclean_stop", uncleanDetail(r), now)
+	return r
+}
+
+// uncleanDetail — что увидит родитель. Списанные минуты названы прямо: отличить
+// сбой питания от снятия агента нельзя, и родителю может понадобиться вернуть
+// время ручной корректировкой ровно на эту величину.
+func uncleanDetail(r agent.Recovery) string {
+	if r.ChargedSecs == 0 {
+		return fmt.Sprintf("агент не работал %s, списывать было нечего", r.Gap.Round(time.Minute))
+	}
+	return fmt.Sprintf("агент не работал %s, списано %d мин",
+		r.Gap.Round(time.Minute), r.ChargedSecs/60)
+}
+
 func status(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Source,
 	localPolicy config.Policy, enrollment config.Enrollment, p paths) error {
 
@@ -225,12 +252,15 @@ func status(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Sourc
 	}
 
 	now := clk.Now(r)
+	// Именно PendingRecovery: status ничего не меняет и не сохраняет, а списать
+	// пропуск без сохранения значило бы списать его повторно при запуске.
+	rec := a.PendingRecovery(now)
 	// Ошибку наблюдения не возвращаем: диагностическая команда обязана
 	// напечатать всё, что смогла узнать, и показать саму ошибку — иначе
 	// от неё нет пользы ровно в тот момент, когда что-то сломалось.
 	v, tickErr := a.Tick(now)
 	printStatus(a, v, now, a.Policy, p.policy, p.state, tickErr)
-	printLink(res, syncErr, clk, lnk, enrollment)
+	printLink(res, syncErr, clk, lnk, enrollment, rec)
 	return nil
 }
 
@@ -265,6 +295,10 @@ func loop(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Source,
 		// Остаток секунд и поправка часов обязаны пережить перезапуск: иначе
 		// достаточно было бы убивать агента, чтобы копить время бесплатно.
 		st.PendingSeconds = lnk.Pending()
+		st.PendingTampers = lnk.Tampers()
+		// Метка времени нужна следующему запуску: по ней считается пропуск,
+		// если этот запуск закончится не штатно.
+		st.LastSeenAt = clk.Now(source())
 		st.ClockOffsetSeconds = int(clk.Offset().Seconds())
 		st.ClockTrusted = clk.Trusted()
 		st.ClockTampers = tampersAtStart + clk.Tampers()
@@ -290,7 +324,21 @@ func loop(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Source,
 			fmt.Printf("политика обновлена (%s)\n", res.Source)
 		}
 	}
+	// Сначала политика: от дневной выдачи считается ограничение списания, и
+	// по локальной оно вышло бы не тем, что задал родитель.
 	sync()
+
+	if rec := recoverUnclean(a, lnk, clk.Now(source())); rec.Unclean {
+		fmt.Fprintf(os.Stderr, "внимание: %s\n", uncleanDetail(rec))
+		// Сохраняемся сразу: убийство агента в первую же минуту не должно
+		// стирать ни списание, ни сообщение родителю.
+		save(false)
+		// И сразу отдаём серверу. Ждать минуту до следующего обмена значит
+		// оставить родителя в неведении ровно тогда, когда это важнее всего.
+		sync()
+	} else {
+		save(false)
+	}
 
 	var lastLine string
 	for {
@@ -308,9 +356,7 @@ func loop(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Source,
 
 		case <-ticker.C:
 			r := source()
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			jump, tampered := lnk.Observe(ctx, r)
-			cancel()
+			jump, tampered := lnk.Observe(r)
 			if tampered {
 				fmt.Fprintf(os.Stderr, "внимание: %s — учёт продолжается по исправленному времени\n", jump)
 			}

@@ -83,8 +83,8 @@ func (a *Agent) State() state.State { return a.st }
 // IsAllowlisted сообщает, освобождён ли процесс от учёта и блокировки.
 func (a *Agent) IsAllowlisted(process string) bool { return a.acc.IsAllowlisted(process) }
 
-// Tick — один шаг цикла. Возвращает вердикт, чтобы вызывающий мог его показать.
-func (a *Agent) Tick(now time.Time) (usage.Verdict, error) {
+// ensureDay переводит учёт на текущие сутки и проставляет дневную выдачу.
+func (a *Agent) ensureDay(now time.Time) schedule.Moment {
 	moment := schedule.At(now, a.Location)
 
 	if a.st.Rollover(moment.Day) {
@@ -96,6 +96,63 @@ func (a *Agent) Tick(now time.Time) (usage.Verdict, error) {
 	usage.Grant(&a.st.Today,
 		a.Policy.LimitFor(moment.Weekday),
 		usage.CarryOver(a.st.Yesterday, a.Policy.CarryOverMaxMinutes))
+	return moment
+}
+
+// Recovery — что агент сделал с последствиями нештатной остановки.
+type Recovery struct {
+	// Unclean — прошлый запуск не завершился штатно.
+	Unclean bool
+	// Gap — сколько времени агент не работал.
+	Gap time.Duration
+	// ChargedSecs — сколько из этого списано.
+	ChargedSecs int
+}
+
+// RecoverUnclean оплачивает время, пропущенное после нештатной остановки.
+//
+// Вызывается один раз при запуске, до цикла, и только теми командами, которые
+// потом сохранят состояние. Отличить сбой питания от снятия агента здесь
+// нельзя, поэтому вызывающий обязан сообщить о списании родителю: вернуть
+// время или нет — решает он.
+func (a *Agent) RecoverUnclean(now time.Time) Recovery {
+	return a.recover(now, true)
+}
+
+// PendingRecovery показывает, что будет списано, ничего не меняя.
+//
+// Нужна диагностике: списать пропуск и не сохранить состояние значило бы
+// списать его второй раз при следующем запуске.
+func (a *Agent) PendingRecovery(now time.Time) Recovery {
+	return a.recover(now, false)
+}
+
+func (a *Agent) recover(now time.Time, apply bool) Recovery {
+	if a.st.CleanShutdown || a.st.LastSeenAt.IsZero() {
+		return Recovery{}
+	}
+	r := Recovery{Unclean: true, Gap: now.Sub(a.st.LastSeenAt)}
+
+	if !apply {
+		// Считаем на копии: поля состояния — значения, так что правки внутри
+		// probe до настоящего агента не доходят.
+		probe := *a
+		probe.ensureDay(now)
+		r.ChargedSecs = usage.GapCharge(probe.st.Today, r.Gap)
+		return r
+	}
+
+	// Выдачу проставляем до списания: ограничение считается от неё, и без
+	// этого при первом за сутки запуске списывать было бы не из чего.
+	a.ensureDay(now)
+	r.ChargedSecs = usage.ChargeGap(&a.st.Today, r.Gap)
+	a.st.UncleanStops++
+	return r
+}
+
+// Tick — один шаг цикла. Возвращает вердикт, чтобы вызывающий мог его показать.
+func (a *Agent) Tick(now time.Time) (usage.Verdict, error) {
+	moment := a.ensureDay(now)
 
 	proc, err := a.Desktop.ForegroundProcess()
 	if err != nil {

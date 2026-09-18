@@ -93,6 +93,26 @@ func newHarness(t *testing.T, handler http.HandlerFunc) *harness {
 
 func itoa(n int) string { return string(rune('0' + n)) }
 
+// serve поднимает ещё один обычный сервер — нужен там, где тест сначала
+// работает без связи, а потом её возвращает.
+func (h *harness) serve(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/agent/tamper":
+			h.calls["tamper"]++
+			var b struct{ Kind, Detail string }
+			json.NewDecoder(r.Body).Decode(&b)
+			h.tampers = append(h.tampers, b.Kind+": "+b.Detail)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			io.WriteString(w, syncBody)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
 func (h *harness) attach(t *testing.T, baseURL string) {
 	t.Helper()
 	box, err := outbox.Open(filepath.Join(h.dir, "outbox.jsonl"))
@@ -460,14 +480,26 @@ func TestObserveReportsTamper(t *testing.T) {
 		t.Fatalf("Sync: %v", err)
 	}
 
-	h.link.Observe(bg(), reading(serverTime.Add(time.Minute), time.Minute))
+	h.link.Observe(reading(serverTime.Add(time.Minute), time.Minute))
 	// Часы переведены на три часа назад: настенное ушло, монотонное нет.
-	jump, tampered := h.link.Observe(bg(), reading(serverTime.Add(-2*time.Hour), 2*time.Minute))
+	jump, tampered := h.link.Observe(reading(serverTime.Add(-2*time.Hour), 2*time.Minute))
 	if !tampered {
 		t.Fatal("перевод часов не замечен")
 	}
 	if jump.Delta > -2*time.Hour {
 		t.Fatalf("сдвиг измерен неверно: %v", jump.Delta)
+	}
+	// Отправка отложена до ближайшего обмена: связи может не быть именно
+	// потому, что её отключили перед переводом часов.
+	if h.calls["tamper"] != 0 {
+		t.Fatalf("сообщение ушло сразу, минуя очередь: вызовов %d", h.calls["tamper"])
+	}
+	if len(h.link.Tampers()) != 1 {
+		t.Fatalf("сообщение не попало в очередь: %+v", h.link.Tampers())
+	}
+
+	if _, err := h.link.Sync(bg(), reading(serverTime.Add(2*time.Minute), 2*time.Minute), local()); err != nil {
+		t.Fatalf("Sync: %v", err)
 	}
 	if h.calls["tamper"] != 1 {
 		t.Fatalf("сервер не уведомлён: вызовов %d", h.calls["tamper"])
@@ -475,16 +507,118 @@ func TestObserveReportsTamper(t *testing.T) {
 	if len(h.tampers) != 1 || h.tampers[0][:5] != "clock" {
 		t.Fatalf("сообщение о вмешательстве неверно: %+v", h.tampers)
 	}
+	if len(h.link.Tampers()) != 0 {
+		t.Fatalf("отправленное сообщение осталось в очереди: %+v", h.link.Tampers())
+	}
+}
+
+func TestTamperSurvivesOfflineAndRestart(t *testing.T) {
+	// Ребёнок выдёргивает сеть, переводит часы и возвращает сеть обратно.
+	// Родитель обязан всё равно узнать.
+	h := newHarness(t, nil)
+	offlineURL := "http://127.0.0.1:1"
+	h.attach(t, offlineURL)
+	h.link.Observe(reading(serverTime, 0))
+	h.link.Observe(reading(serverTime.Add(-3*time.Hour), time.Minute))
+
+	if _, err := h.link.Sync(bg(), reading(serverTime, time.Minute), local()); err != nil {
+		t.Fatalf("офлайн не ошибка: %v", err)
+	}
+	saved := h.link.Tampers()
+	if len(saved) != 1 {
+		t.Fatalf("без сети сообщение потеряно: %+v", saved)
+	}
+
+	// Перезапуск агента: очередь восстанавливается из файла состояния.
+	srv := h.serve(t)
+	h.attach(t, srv)
+	h.link.SetTampers(saved)
+
+	if _, err := h.link.Sync(bg(), reading(serverTime, 0), local()); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if h.calls["tamper"] != 1 {
+		t.Fatalf("сообщение не дошло после восстановления связи: %d", h.calls["tamper"])
+	}
+	if len(h.link.Tampers()) != 0 {
+		t.Fatalf("очередь не очищена: %+v", h.link.Tampers())
+	}
+}
+
+func TestTamperQueueIsBounded(t *testing.T) {
+	// Очередь не должна расти бесконечно и раздувать файл состояния.
+	h := newHarness(t, nil)
+	h.attach(t, "http://127.0.0.1:1")
+	for i := 0; i < MaxTampers+20; i++ {
+		h.link.QueueTamper("clock", "сдвиг", serverTime.Add(time.Duration(i)*time.Minute))
+	}
+	got := h.link.Tampers()
+	if len(got) != MaxTampers {
+		t.Fatalf("в очереди %d сообщений вместо %d", len(got), MaxTampers)
+	}
+	// Отбрасываются старые: свежие события важнее сотого подряд.
+	if !got[len(got)-1].At.Equal(serverTime.Add(time.Duration(MaxTampers+19) * time.Minute)) {
+		t.Fatalf("самое свежее сообщение потеряно: %v", got[len(got)-1].At)
+	}
+}
+
+func TestTampersAreCopies(t *testing.T) {
+	h := newHarness(t, nil)
+	h.link.QueueTamper("clock", "сдвиг", serverTime)
+	got := h.link.Tampers()
+	got[0].Kind = "подменено"
+	if h.link.Tampers()[0].Kind != "clock" {
+		t.Fatal("Tampers отдал ссылку на внутренний срез")
+	}
+}
+
+func TestRejectedTamperDoesNotBlockQueue(t *testing.T) {
+	// Сервер отверг сообщение (скажем, слишком длинное). Держать его вечно
+	// нельзя: оно заблокировало бы все следующие.
+	var seen int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/agent/tamper" {
+			seen++
+			if seen == 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				io.WriteString(w, `{"message":"слишком длинно"}`)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		io.WriteString(w, syncBody)
+	}))
+	t.Cleanup(srv.Close)
+
+	h := newHarness(t, nil)
+	h.attach(t, srv.URL)
+	h.link.QueueTamper("clock", "первое", serverTime)
+	h.link.QueueTamper("clock", "второе", serverTime.Add(time.Minute))
+
+	if _, err := h.link.Sync(bg(), reading(serverTime, 0), local()); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(h.link.Tampers()) != 1 {
+		t.Fatalf("отвергнутое сообщение не выброшено: %+v", h.link.Tampers())
+	}
+
+	if _, err := h.link.Sync(bg(), reading(serverTime.Add(time.Minute), time.Minute), local()); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(h.link.Tampers()) != 0 {
+		t.Fatalf("второе сообщение не ушло: %+v", h.link.Tampers())
+	}
 }
 
 func TestObserveQuietWhenClockIsFine(t *testing.T) {
 	h := newHarness(t, nil)
-	h.link.Observe(bg(), reading(serverTime, 0))
-	if _, tampered := h.link.Observe(bg(), reading(serverTime.Add(5*time.Second), 5*time.Second)); tampered {
+	h.link.Observe(reading(serverTime, 0))
+	if _, tampered := h.link.Observe(reading(serverTime.Add(5*time.Second), 5*time.Second)); tampered {
 		t.Fatal("ровный ход принят за подкрутку")
 	}
-	if h.calls["tamper"] != 0 {
-		t.Fatalf("лишнее уведомление: %d", h.calls["tamper"])
+	if len(h.link.Tampers()) != 0 {
+		t.Fatalf("лишнее сообщение в очереди: %+v", h.link.Tampers())
 	}
 }
 
@@ -492,8 +626,8 @@ func TestObserveSurvivesUnreachableServer(t *testing.T) {
 	// Компенсация важнее уведомления: недоступный сервер не должен мешать.
 	h := newHarness(t, nil)
 	h.attach(t, "http://127.0.0.1:1")
-	h.link.Observe(bg(), reading(serverTime, 0))
-	if _, tampered := h.link.Observe(bg(), reading(serverTime.Add(-3*time.Hour), time.Minute)); !tampered {
+	h.link.Observe(reading(serverTime, 0))
+	if _, tampered := h.link.Observe(reading(serverTime.Add(-3*time.Hour), time.Minute)); !tampered {
 		t.Fatal("без сети подкрутка всё равно должна ловиться")
 	}
 	if h.clk.Offset() != 3*time.Hour+time.Minute {
@@ -525,5 +659,33 @@ func TestQueuedReportsMinutes(t *testing.T) {
 	h.link.Record(300, serverTime)
 	if h.link.Queued() != 5 {
 		t.Fatalf("Queued вернул %d", h.link.Queued())
+	}
+}
+
+func TestTamperSurvivesConnectionDropMidSync(t *testing.T) {
+	// Обмен прошёл, а на отправке сообщения связь оборвалась. Выбросить его
+	// нельзя: родитель узнал бы о снятии агента только если повезёт с сетью.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/agent/tamper" {
+			// Рвём соединение, как это делает пропавшая сеть.
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				conn.Close()
+			}
+			return
+		}
+		io.WriteString(w, syncBody)
+	}))
+	t.Cleanup(srv.Close)
+
+	h := newHarness(t, nil)
+	h.attach(t, srv.URL)
+	h.link.QueueTamper("unclean_stop", "агент не работал 40m0s", serverTime)
+
+	if _, err := h.link.Sync(bg(), reading(serverTime, 0), local()); err != nil {
+		t.Fatalf("обрыв на отправке сообщения не должен валить обмен: %v", err)
+	}
+	if len(h.link.Tampers()) != 1 {
+		t.Fatalf("сообщение выброшено при обрыве связи: %+v", h.link.Tampers())
 	}
 }

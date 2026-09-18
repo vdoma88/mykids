@@ -184,6 +184,34 @@ describe('ребёнок и агент', () => {
     expect(after.balances.minutes).toBe(before.balances.minutes);
   });
 
+  it('время события берётся с устройства, а не момент доставки', async () => {
+    const { auth, device, childId } = await withChild();
+    // Сообщение пролежало в офлайне сутки: родителю важно, когда это случилось.
+    const at = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const res = await app.inject({
+      method: 'POST', url: '/agent/tamper', headers: device,
+      payload: { kind: 'unclean_stop', detail: 'агент не работал 40m0s, списано 40 мин', at },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const list = await app.inject({
+      method: 'GET', url: `/admin/children/${childId}/tampers`, headers: auth,
+    });
+    const e = (list.json() as { events: { occurredAt: string; recordedAt: string }[] }).events[0]!;
+    expect(new Date(e.occurredAt).toISOString()).toBe(at);
+    // Момент доставки — сегодня, и он тоже сохранён
+    expect(new Date(e.recordedAt).getTime()).toBeGreaterThan(new Date(at).getTime());
+  });
+
+  it('сообщение без времени устройства всё равно принимается', async () => {
+    // Старый агент его не шлёт, а отказ означал бы потерю сообщения целиком.
+    const { device } = await withChild();
+    const res = await app.inject({
+      method: 'POST', url: '/agent/tamper', headers: device, payload: { kind: 'clock' },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it('родитель видит события вмешательства и может их закрыть', async () => {
     const { auth, device, childId } = await withChild();
     for (const detail of ['часы назад на 3h', 'часы вперёд на 2h']) {

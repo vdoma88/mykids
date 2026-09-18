@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/vdoma88/mykids/agents/windows/internal/client"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 )
 
@@ -28,6 +30,13 @@ type State struct {
 	ClockTrusted       bool `json:"clockTrusted"`
 	// Сколько раз замечена подкрутка часов. Растёт и уходит на сервер.
 	ClockTampers int `json:"clockTampers"`
+	// Когда агент последний раз сохранял состояние. По нему считается пропуск
+	// после нештатной остановки — иначе снять агента было бы выгодно.
+	LastSeenAt time.Time `json:"lastSeenAt"`
+	// Сообщения о вмешательстве, не дошедшие до сервера. Лежат здесь, а не в
+	// памяти: без этого хватило бы выдернуть сеть, снять агента и вернуть сеть
+	// обратно, чтобы родитель ничего не узнал.
+	PendingTampers []client.TamperEvent `json:"pendingTampers,omitempty"`
 }
 
 // Load читает состояние. Отсутствующий или битый файл — не повод падать:

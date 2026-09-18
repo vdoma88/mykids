@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/vdoma88/mykids/agents/windows/internal/agent"
 	"github.com/vdoma88/mykids/agents/windows/internal/clock"
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
 	"github.com/vdoma88/mykids/agents/windows/internal/link"
@@ -14,7 +15,8 @@ import (
 // Отдельный блок нужен потому, что «ребёнок получил лишнее время» чаще всего
 // объясняется не учётом, а связью: устаревший кэш политики, очередь, которая
 // не уходит, или переведённые часы.
-func printLink(res link.Result, syncErr error, clk *clock.Clock, lnk *link.Link, e config.Enrollment) {
+func printLink(res link.Result, syncErr error, clk *clock.Clock, lnk *link.Link,
+	e config.Enrollment, rec agent.Recovery) {
 	fmt.Println("— связь с сервером —")
 	fmt.Printf("  сервер:     %s\n", e.Redacted())
 
@@ -65,5 +67,18 @@ func printLink(res link.Result, syncErr error, clk *clock.Clock, lnk *link.Link,
 	}
 	if n := clk.Tampers(); n > 0 {
 		fmt.Printf("  подкруток:  %d за этот запуск\n", n)
+	}
+
+	if rec.Unclean || len(lnk.Tampers()) > 0 {
+		fmt.Println("— вмешательство —")
+		if rec.Unclean {
+			fmt.Printf("  прошлый запуск завершился нештатно: агент не работал %s\n",
+				rec.Gap.Round(time.Minute))
+			// Именно «будет списано»: status ничего не меняет, списывает запуск.
+			fmt.Printf("  при запуске watch или run будет списано: %d мин\n", rec.ChargedSecs/60)
+		}
+		if n := len(lnk.Tampers()); n > 0 {
+			fmt.Printf("  не доставлено родителю: %d сообщ.\n", n)
+		}
 	}
 }

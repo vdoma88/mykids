@@ -114,6 +114,11 @@ function WindowsEditor({
   );
 }
 
+/** Задержка доставки, которую стоит показать отдельной строкой. */
+function delivered(occurredAt: string, recordedAt: string): boolean {
+  return new Date(recordedAt).getTime() - new Date(occurredAt).getTime() > 5 * 60 * 1000;
+}
+
 const TAMPER_KINDS: Record<string, string> = {
   clock: 'переведены системные часы',
   unclean_stop: 'агент остановлен нештатно',
@@ -151,7 +156,14 @@ function TamperLog({ childId, query, readOnly }: {
         <tbody>
           {events.map((e) => (
             <tr key={e.id} style={{ opacity: e.reviewedAt ? 0.5 : 1 }}>
-              <td className="note">{new Date(e.recordedAt).toLocaleString('ru-RU')}</td>
+              <td className="note">
+                {new Date(e.occurredAt ?? e.recordedAt).toLocaleString('ru-RU')}
+                {/* Сообщение могло пролежать в офлайне: тогда момент доставки
+                    отличается от момента события, и это стоит показать. */}
+                {e.occurredAt && delivered(e.occurredAt, e.recordedAt) && (
+                  <div>доставлено {new Date(e.recordedAt).toLocaleString('ru-RU')}</div>
+                )}
+              </td>
               <td>{e.device?.name ?? '—'}</td>
               <td>
                 {TAMPER_KINDS[e.kind] ?? e.kind}
@@ -173,8 +185,10 @@ function TamperLog({ childId, query, readOnly }: {
         }}>Отметить разобранными</button>
       )}
       <p className="note" style={{ marginTop: 8 }}>
-        Само событие минут не списывает. Если решили наказать — сделайте это ручной
-        корректировкой, чтобы в журнале осталась причина.
+        Само событие минут не списывает — кроме одного случая: после нештатной остановки
+        агент оплачивает пропущенное время сам, и в описании написано сколько. Отличить
+        сбой питания от снятия агента он не может, поэтому если это была не попытка
+        схитрить — верните время ручной корректировкой на ту же величину.
       </p>
     </div>
   );
