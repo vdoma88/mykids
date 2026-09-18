@@ -86,7 +86,10 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
     await assertOwnChild(s, req.guardian!.familyId, childId);
     const body = policyBody.parse(req.body);
     // Ещё раз прогоняем через доменную схему: она источник истины о форме политики.
-    policySchema.parse({ ...body, economy: body.economy });
+    // alwaysAllowed в неё не входит и отбрасывается — схема strict и упала бы
+    // на лишнем ключе.
+    const { alwaysAllowed: _allowlist, ...domainShape } = body;
+    policySchema.parse(domainShape);
 
     await s.prisma.policy.upsert({
       where: { childId },

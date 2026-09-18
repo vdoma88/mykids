@@ -91,6 +91,18 @@ jobs:
         run: npx vitest run
         working-directory: server/api
 
+      - name: Сборка админки
+        run: npm run build -w @mykids/admin-ui
+
+      - name: Браузер для сквозного теста
+        run: npx playwright install --with-deps chromium
+
+      - name: Сквозной тест админки
+        run: node e2e.mjs
+        working-directory: server/admin-ui
+        env:
+          DATABASE_URL_E2E: postgresql://postgres:postgres@localhost:5432/mykids_test
+
   agent:
     name: Windows-агент
     runs-on: ubuntu-latest
