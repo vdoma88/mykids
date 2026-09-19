@@ -204,6 +204,13 @@ func TestLinkRoundTrip(t *testing.T) {
 	if want := before.Balances.Minutes - 2; res.Balances.Minutes != want {
 		t.Fatalf("списано неверно: остаток %d вместо %d", res.Balances.Minutes, want)
 	}
+	// Курс обмена доходит до того, кто пишет текст ребёнку. Без него на
+	// закрытом экране вместо «это ещё 2 часа» останутся голые кредиты,
+	// которые сами по себе ни о чём не говорят.
+	if res.CreditsPerMinute != before.Policy.Economy.CreditsPerMinute {
+		t.Fatalf("курс обмена не дошёл: %d вместо %d",
+			res.CreditsPerMinute, before.Policy.Economy.CreditsPerMinute)
+	}
 	if box.Len() != 0 {
 		t.Fatalf("очередь не очищена: %d", box.Len())
 	}

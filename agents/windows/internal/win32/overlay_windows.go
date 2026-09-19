@@ -52,8 +52,8 @@ const (
 	smCxScreen     = 0
 	smCyScreen     = 1
 	dtCenter       = 0x00000001
-	dtVCenter      = 0x00000004
 	dtWordBreak    = 0x00000010
+	dtCalcRect     = 0x00000400
 	transparentBk  = 1
 	hwndTopmost    = ^uintptr(0) // (HWND)-1
 	swpNoMove      = 0x0002
@@ -101,20 +101,39 @@ type paintStruct struct {
 // Живёт в своей горутине с собственным циклом сообщений: Windows требует,
 // чтобы сообщения окна обрабатывались в том же потоке, где оно создано.
 type Overlay struct {
-	mu      sync.Mutex
-	hwnd    windows.HWND
-	text    string
-	done    chan struct{}
+	mu   sync.Mutex
+	hwnd windows.HWND
+	text string
+	done chan struct{}
+	// compact — это предупреждение полосой, а не закрытый экран.
+	compact bool
 	classOK bool
+}
+
+// Compact сообщает, полоса это или полноэкранный оверлей.
+func (o *Overlay) Compact() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.compact
 }
 
 var (
 	overlayOnce  sync.Once
 	overlayClass *uint16
 	overlayReg   error
-	activeMu     sync.Mutex
-	active       *Overlay
+	// Окон бывает два сразу: полоса предупреждения и полноэкранный оверлей.
+	// Поэтому не «текущее окно», а таблица: иначе полоса рисовала бы текст
+	// оверлея, и предупреждение врало бы ребёнку чужими словами.
+	shownMu sync.Mutex
+	shown   = map[windows.HWND]*Overlay{}
 )
+
+// byWindow находит оверлей, которому принадлежит окно.
+func byWindow(hwnd windows.HWND) *Overlay {
+	shownMu.Lock()
+	defer shownMu.Unlock()
+	return shown[hwnd]
+}
 
 func registerClass() {
 	overlayClass = windows.StringToUTF16Ptr("MyKidsOverlay")
@@ -168,8 +187,22 @@ func paintOverlay(hwnd windows.HWND) {
 	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&ps.rcPaint)), brush)
 	procDeleteObject.Call(brush)
 
+	text, compact := "", false
+	if o := byWindow(hwnd); o != nil {
+		o.mu.Lock()
+		text, compact = o.text, o.compact
+		o.mu.Unlock()
+	}
+
+	// Полоса — 460 на 120 точек, и заголовок в сорок четыре пункта в неё
+	// просто не поместится: подросток увидит обрезанное слово вместо
+	// предупреждения.
+	height, pad := ^uintptr(43), int32(64) // -44
+	if compact {
+		height, pad = ^uintptr(21), 16 // -22
+	}
 	font, _, _ := procCreateFontW.Call(
-		^uintptr(43), 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 0, // высота -44, полужирный
+		height, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 0, // полужирный
 		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("Segoe UI"))))
 	if font != 0 {
 		procSelectObject.Call(hdc, font)
@@ -179,29 +212,49 @@ func paintOverlay(hwnd windows.HWND) {
 	procSetTextColor.Call(hdc, 0x00F0EAF5)
 	procSetBkMode.Call(hdc, transparentBk)
 
-	activeMu.Lock()
-	text := ""
-	if active != nil {
-		active.mu.Lock()
-		text = active.text
-		active.mu.Unlock()
-	}
-	activeMu.Unlock()
-
 	area := ps.rcPaint
+	area.left += pad
+	area.right -= pad
+	area.top += pad
+	area.bottom -= pad
+
+	// DT_VCENTER работает только с одной строкой, а тут их несколько. Поэтому
+	// сначала меряем текст, потом сдвигаем прямоугольник: иначе объяснение
+	// прижимается к верхней кромке экрана, где его не читают.
+	utf16 := windows.StringToUTF16Ptr(text)
+	measured := area
+	procDrawTextW.Call(hdc, uintptr(unsafe.Pointer(utf16)), ^uintptr(0),
+		uintptr(unsafe.Pointer(&measured)), dtCalcRect|dtCenter|dtWordBreak)
+	if h := measured.bottom - measured.top; h < area.bottom-area.top {
+		area.top += (area.bottom - area.top - h) / 2
+	}
+
 	procDrawTextW.Call(hdc,
-		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(text))), ^uintptr(0),
-		uintptr(unsafe.Pointer(&area)), dtCenter|dtVCenter|dtWordBreak)
+		uintptr(unsafe.Pointer(utf16)), ^uintptr(0),
+		uintptr(unsafe.Pointer(&area)), dtCenter|dtWordBreak)
 }
 
 // ShowOverlay создаёт полноэкранный оверлей и возвращает управление сразу.
 func ShowOverlay(text string) (*Overlay, error) {
+	return show(text, false)
+}
+
+// ShowBar показывает предупреждение полосой внизу справа.
+//
+// Не во весь экран намеренно: предупреждение говорит «успей сохраниться», и
+// перекрыть им экран ровно в тот момент, когда надо спешить, значит сделать
+// его бесполезным и обидным.
+func ShowBar(text string) (*Overlay, error) {
+	return show(text, true)
+}
+
+func show(text string, compact bool) (*Overlay, error) {
 	overlayOnce.Do(registerClass)
 	if overlayReg != nil {
 		return nil, overlayReg
 	}
 
-	o := &Overlay{text: text, done: make(chan struct{}), classOK: true}
+	o := &Overlay{text: text, done: make(chan struct{}), classOK: true, compact: compact}
 	ready := make(chan error, 1)
 
 	go func() {
@@ -209,9 +262,24 @@ func ShowOverlay(text string) (*Overlay, error) {
 		runtimeLockOSThread()
 		defer runtimeUnlockOSThread()
 		defer close(o.done)
+		// Убираем за собой и когда цикл сообщений оборвался сам, а не по Close:
+		// иначе запись в таблице переживёт окно и будет отвечать за чужой hwnd,
+		// который Windows выдаст следующему.
+		defer func() {
+			shownMu.Lock()
+			delete(shown, windows.HWND(hwndOf(o)))
+			shownMu.Unlock()
+		}()
 
-		cx, _, _ := procGetSystemMetrics.Call(smCxScreen)
-		cy, _, _ := procGetSystemMetrics.Call(smCyScreen)
+		screenX, _, _ := procGetSystemMetrics.Call(smCxScreen)
+		screenY, _, _ := procGetSystemMetrics.Call(smCyScreen)
+		x, y, cx, cy := uintptr(0), uintptr(0), screenX, screenY
+		if compact {
+			// Полоса у нижнего правого угла, с отступом от края.
+			cx, cy = 460, 120
+			x, y = screenX-cx-32, screenY-cy-64
+		}
+
 		var inst windows.Handle
 		_ = windows.GetModuleHandleEx(0, nil, &inst)
 
@@ -219,7 +287,7 @@ func ShowOverlay(text string) (*Overlay, error) {
 			wsExTopmost|wsExToolWindow,
 			uintptr(unsafe.Pointer(overlayClass)),
 			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("MyKids"))),
-			wsPopup, 0, 0, cx, cy, 0, 0, uintptr(inst), 0)
+			wsPopup, x, y, cx, cy, 0, 0, uintptr(inst), 0)
 		if hwnd == 0 {
 			ready <- fmt.Errorf("CreateWindowExW: %w", err)
 			return
@@ -229,9 +297,9 @@ func ShowOverlay(text string) (*Overlay, error) {
 		o.hwnd = windows.HWND(hwnd)
 		o.mu.Unlock()
 
-		activeMu.Lock()
-		active = o
-		activeMu.Unlock()
+		shownMu.Lock()
+		shown[windows.HWND(hwnd)] = o
+		shownMu.Unlock()
 
 		procShowWindow.Call(hwnd, swShow)
 		procSetWindowPos.Call(hwnd, hwndTopmost, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoActivate)
@@ -277,9 +345,35 @@ func (o *Overlay) Close() {
 	procPostMessageW.Call(uintptr(hwnd), wmAppClose, 0, 0)
 	<-o.done
 
-	activeMu.Lock()
-	if active == o {
-		active = nil
+	shownMu.Lock()
+	delete(shown, hwnd)
+	shownMu.Unlock()
+}
+
+// hwndOf — окно оверлея, ноль если уже закрыто.
+func hwndOf(o *Overlay) uintptr {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return uintptr(o.hwnd)
+}
+
+// Alive сообщает, жив ли ещё цикл сообщений окна.
+//
+// Нужно тому, кто показывает: окно могло умереть само — например, цикл
+// сообщений оборвался ошибкой. Молча оставить экран открытым в этом случае
+// нельзя, поэтому оверлей создаётся заново.
+func (o *Overlay) Alive() bool {
+	select {
+	case <-o.done:
+		return false
+	default:
+		return true
 	}
-	activeMu.Unlock()
+}
+
+// Text возвращает текущую надпись.
+func (o *Overlay) Text() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.text
 }

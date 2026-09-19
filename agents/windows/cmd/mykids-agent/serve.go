@@ -12,6 +12,7 @@ import (
 
 	"github.com/vdoma88/mykids/agents/windows/internal/helper"
 	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/service"
 	"github.com/vdoma88/mykids/agents/windows/internal/winsvc"
 )
@@ -27,6 +28,7 @@ func serve(a assembled, o options) error {
 			Agent: a.agent, Link: a.link, Clock: a.clock, Source: a.source,
 			StatePath: a.paths.state, LocalPolicy: a.localPolicy, Log: log,
 		})
+		core.SetChildURL(a.childURL)
 
 		l, err := ipc.Listen(o.pipe)
 		if err != nil {
@@ -108,17 +110,29 @@ func runHelper(o options) error {
 	var lostSince time.Time
 	blocked := false
 
-	apply := func(s helper.Screen) {
+	// Предупреждение экран не перекрывает: отнять его у подростка ровно тогда,
+	// когда он спешит сохраниться, — значит сделать предупреждение бесполезным.
+	apply := func(s screen.Screen) {
 		switch {
-		case s.Block:
-			if err := enforcer.Block(s.Message); err != nil {
+		case s.Kind == screen.Block:
+			hideWarning()
+			if err := enforcer.Block(screen.Render(s)); err != nil {
 				fmt.Fprintf(os.Stderr, "блокировка: %v\n", err)
 				return
 			}
 			blocked = true
-		case blocked:
-			enforcer.Unblock()
-			blocked = false
+		case s.Kind == screen.Warn:
+			if blocked {
+				enforcer.Unblock()
+				blocked = false
+			}
+			warn(s)
+		default:
+			hideWarning()
+			if blocked {
+				enforcer.Unblock()
+				blocked = false
+			}
 		}
 	}
 
@@ -131,6 +145,7 @@ func runHelper(o options) error {
 			if conn != nil {
 				conn.Close()
 			}
+			hideWarning()
 			enforcer.Unblock()
 			return nil
 

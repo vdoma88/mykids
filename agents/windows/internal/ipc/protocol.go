@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 )
 
 // MaxLine — предел длины строки. Помощник работает с правами ребёнка, и
@@ -40,14 +42,12 @@ type Sample struct {
 
 // Verdict — что служба решила и что помощник должен показать.
 type Verdict struct {
-	Allow    bool   `json:"allow"`
-	Reason   string `json:"reason,omitempty"`
-	Window   string `json:"window,omitempty"`
-	LeftSecs int    `json:"leftSecs"`
-	WarnSoon bool   `json:"warnSoon"`
-	// Message — текст для оверлея. Готовит служба: помощник не должен решать,
-	// что написать ребёнку, иначе подменённый помощник напишет что угодно.
-	Message string `json:"message,omitempty"`
+	Allow    bool          `json:"allow"`
+	Reason   string        `json:"reason,omitempty"`
+	Window   string        `json:"window,omitempty"`
+	LeftSecs int           `json:"leftSecs"`
+	WarnSoon bool          `json:"warnSoon"`
+	Screen   screen.Screen `json:"screen,omitempty"`
 }
 
 // ErrClosed — собеседник закрыл соединение. Не ошибка: помощник перезапускается,

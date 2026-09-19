@@ -18,6 +18,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
 	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
 	"github.com/vdoma88/mykids/agents/windows/internal/link"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 )
@@ -65,6 +66,24 @@ type Core struct {
 	// растёт за весь запуск, и прибавлять его при каждом сохранении значило бы
 	// считать одни и те же сдвиги снова и снова.
 	tampersAtStart int
+	// ctx — то, что ребёнок видит на закрытом экране: остатки, курс, адрес.
+	// Обновляется при обмене с сервером; без связи остаются прошлые значения,
+	// и это лучше пустоты — вчерашний остаток кредитов всё ещё ориентир.
+	ctx screen.Context
+}
+
+// Context — что служба знает про остатки ребёнка прямо сейчас.
+func (c *Core) Context() screen.Context {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.ctx
+}
+
+// SetChildURL задаёт адрес, куда ребёнку идти за заданиями.
+func (c *Core) SetChildURL(url string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ctx.ChildURL = url
 }
 
 // New собирает ядро.
@@ -133,6 +152,16 @@ func (c *Core) sync(ctx context.Context) link.Result {
 	if changed {
 		c.opt.Log("политика обновлена (%s)", res.Source)
 	}
+
+	if res.Online {
+		c.ctx.Minutes, c.ctx.Credits = res.Balances.Minutes, res.Balances.Credits
+	}
+	// Курс запоминаем и не сбрасываем без связи: политика остаётся в силе,
+	// и пересчёт кредитов в минуты — тоже.
+	if res.CreditsPerMinute > 0 {
+		c.ctx.CreditsPerMinute = res.CreditsPerMinute
+	}
+	c.ctx.TomorrowMinutes = c.opt.Agent.TomorrowLimit(time.Now())
 	return res
 }
 
@@ -285,7 +314,7 @@ func (c *Core) Handler(remote Observer, idleThreshold time.Duration, now func() 
 		remote.Update(scrutiny.Correct(s, at))
 		// Тик здесь, а не только по таймеру: иначе помощник несколько секунд
 		// показывал бы уже отменённое решение.
-		return Verdict(c.Tick())
+		return Verdict(c.Tick(), c.Context())
 	}
 }
 
@@ -293,16 +322,13 @@ func (c *Core) Handler(remote Observer, idleThreshold time.Duration, now func() 
 //
 // Текст готовит служба: помощнику незачем знать правила, а подменённому
 // помощнику незачем давать сочинять надпись ребёнку.
-func Verdict(v usage.Verdict) ipc.Verdict {
-	out := ipc.Verdict{
+func Verdict(v usage.Verdict, c screen.Context) ipc.Verdict {
+	return ipc.Verdict{
 		Allow:    v.Allow,
 		Reason:   v.Reason,
 		Window:   v.Window,
 		LeftSecs: v.LeftSecs,
 		WarnSoon: v.WarnSoon,
+		Screen:   screen.Build(v, c),
 	}
-	if !v.Allow {
-		out.Message = agent.BlockMessage(v)
-	}
-	return out
 }

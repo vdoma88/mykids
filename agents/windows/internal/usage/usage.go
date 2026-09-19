@@ -183,6 +183,8 @@ type Verdict struct {
 	LeftSecs  int
 	WarnSoon  bool
 	TasksOnly bool
+	// Until — когда кончится окно расписания, "HH:MM".
+	Until string
 	// ConsumedSecs — сколько списано этим замером. Нужно вызывающему, чтобы
 	// поставить расход в очередь на сервер: иначе списание жило бы только в
 	// локальном файле состояния, который ребёнок может удалить.
@@ -199,9 +201,12 @@ func Decide(windows []schedule.Window, m schedule.Moment, day Day, warnBefore ti
 
 	switch d.Mode {
 	case schedule.ModeBlocked:
-		return Verdict{Reason: "расписание", Window: d.Window, LeftSecs: left}
+		return Verdict{Reason: "расписание", Window: d.Window, Until: d.Until, LeftSecs: left}
 	case schedule.ModeTasksOnly:
-		return Verdict{Reason: "только задания", Window: d.Window, LeftSecs: left, TasksOnly: true}
+		return Verdict{
+			Reason: "только задания", Window: d.Window, Until: d.Until,
+			LeftSecs: left, TasksOnly: true,
+		}
 	}
 
 	if left <= 0 {

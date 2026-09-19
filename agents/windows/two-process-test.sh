@@ -5,7 +5,8 @@
 #
 # Юнит-тесты проверяют протокол и учёт по отдельности. Здесь проверяется то,
 # что видно только на живом запуске: что время действительно списывается с той
-# скоростью, с какой идёт, и что снятие помощника не останавливает счёт.
+# скоростью, с какой идёт, что предупреждение приходит раньше блокировки, что
+# ребёнку объяснили причину, и что снятие помощника не останавливает счёт.
 #
 # Именно так нашлась потеря времени на округлении: помощник шлёт наблюдения
 # каждую секунду, таймер службы тикает своим чередом, промежутки выходят по
@@ -16,13 +17,17 @@ cd "$(dirname "$0")"
 BIN=$(mktemp -d)/mykids-agent
 DATA=$(mktemp -d)
 SOCK="$DATA/agent.sock"
-LIMIT_SECONDS=${LIMIT_SECONDS:-60}
+LIMIT_MINUTES=${LIMIT_MINUTES:-2}
+LIMIT_SECONDS=$(( LIMIT_MINUTES * 60 ))
 
 go build -o "$BIN" ./cmd/mykids-agent
 
-# Минута в день: лимит кончится за время прогона.
+# Две минуты в день с предупреждением за минуту: лимит кончится за время
+# прогона, и первую минуту предупреждения быть не должно. Иначе проверка
+# «предупредили заранее» прошла бы и для надписи, висящей всегда.
 cat > "$DATA/policy.json" <<EOF
-{"timezone":"UTC","dailyLimitMinutes":[1,1,1,1,1,1,1],"carryOverMaxMinutes":0,
+{"timezone":"UTC","dailyLimitMinutes":[$LIMIT_MINUTES,$LIMIT_MINUTES,$LIMIT_MINUTES,$LIMIT_MINUTES,$LIMIT_MINUTES,$LIMIT_MINUTES,$LIMIT_MINUTES],
+ "carryOverMaxMinutes":0,
  "windows":[],"alwaysAllowed":["explorer.exe"],"idleThresholdSeconds":120,"warnBeforeMinutes":1}
 EOF
 
@@ -62,9 +67,38 @@ until grep -q "ЭКРАН ЗАКРЫТ" "$DATA/helper.log" 2>/dev/null; do
 done
 echo "лимит исчерпан, помощник закрыл экран"
 
-if ! grep -q "закончилось" "$DATA/helper.log"; then
-  echo "ребёнку не объяснили причину:" >&2; cat "$DATA/helper.log" >&2; exit 1
+# Дальше — про то, что видит подросток. Проверять это на живом запуске нужно
+# по той же причине, что и учёт: порядок событий во времени юнит-тестом не
+# ловится, а именно он тут и важен.
+line_of() { grep -n "$1" "$DATA/helper.log" | head -1 | cut -d: -f1; }
+warned=$(line_of "ПРЕДУПРЕЖДЕНИЕ" || true)
+blocked=$(line_of "ЭКРАН ЗАКРЫТ")
+
+if [ -z "$warned" ]; then
+  echo "экран закрылся без предупреждения:" >&2; cat "$DATA/helper.log" >&2
+  echo "потерять экран посреди игры без предупреждения — худшее, что можно сделать" >&2
+  exit 1
 fi
+if [ "$warned" -ge "$blocked" ]; then
+  echo "предупреждение появилось не раньше блокировки:" >&2
+  cat "$DATA/helper.log" >&2; exit 1
+fi
+echo "предупреждение пришло раньше блокировки (строки $warned и $blocked)"
+
+if grep "ПРЕДУПРЕЖДЕНИЕ" "$DATA/helper.log" | grep -q "0 минут"; then
+  echo "в предупреждении осталось «0 минут»:" >&2
+  grep "ПРЕДУПРЕЖДЕНИЕ" "$DATA/helper.log" >&2
+  echo "ноль — не предупреждение, а недоразумение: время ещё идёт" >&2
+  exit 1
+fi
+
+# Закрытый экран без объяснения читается как наказание, а не как правило.
+for expect in "кончилось" "Завтра будет"; do
+  if ! grep -q "$expect" "$DATA/helper.log"; then
+    echo "на закрытом экране нет «$expect»:" >&2; cat "$DATA/helper.log" >&2; exit 1
+  fi
+done
+echo "на закрытом экране сказано, почему и что будет завтра"
 
 # Снимаем помощника: служба обязана продолжать считать, а не считать это отдыхом.
 kill "$helper_pid" 2>/dev/null || true

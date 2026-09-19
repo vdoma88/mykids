@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/agent"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 )
 
 // Вне Windows агент собирается и запускается, но рабочего стола не видит.
@@ -47,6 +48,28 @@ func (e *printEnforcer) Unblock() {
 		e.blocked = false
 	}
 }
+
+// shownWarning — что уже напечатано. Помощник зовёт warn на каждом замере, и
+// без этого в консоли будет одна и та же строка раз в секунду: в таком выводе
+// не видно, когда предупреждение сменилось, а ради этого его и смотрят.
+var shownWarning string
+
+// warn показывает ненавязчивое предупреждение. Вне Windows — строкой.
+func warn(s screen.Screen) {
+	line := s.Title
+	if s.Hint != "" {
+		line += " — " + s.Hint
+	}
+	if line == shownWarning {
+		return
+	}
+	shownWarning = line
+	fmt.Println("ПРЕДУПРЕЖДЕНИЕ:", line)
+}
+
+// hideWarning убирает предупреждение. Вне Windows убирать нечего, кроме памяти
+// о том, что уже напечатано.
+func hideWarning() { shownWarning = "" }
 
 func newDesktop() agent.Desktop   { return stubDesktop{} }
 func newEnforcer() agent.Enforcer { return &printEnforcer{} }

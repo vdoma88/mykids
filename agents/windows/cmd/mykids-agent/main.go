@@ -29,6 +29,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/link"
 	"github.com/vdoma88/mykids/agents/windows/internal/outbox"
 	"github.com/vdoma88/mykids/agents/windows/internal/policy"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 )
 
@@ -48,6 +49,7 @@ func main() {
 	interval := flag.Duration("interval", 5*time.Second, "период опроса рабочего стола")
 	server := flag.String("server", "", "адрес сервера семьи (для enroll)")
 	token := flag.String("token", "", "токен устройства (для enroll)")
+	childURL := flag.String("child-url", "", "адрес заданий и магазина для ребёнка (для enroll)")
 	pipe := flag.String("pipe", ipc.DefaultAddr, "канал между службой и помощником")
 	flag.Usage = printUsage
 	flag.Parse()
@@ -69,7 +71,7 @@ func main() {
 
 	opts := options{
 		dataDir: *dataDir, interval: *interval,
-		server: *server, token: *token, pipe: *pipe,
+		server: *server, token: *token, childURL: *childURL, pipe: *pipe,
 		sub: flag.Arg(1),
 	}
 	if err := run(cmd, opts); err != nil {
@@ -83,6 +85,7 @@ type options struct {
 	interval time.Duration
 	server   string
 	token    string
+	childURL string
 	pipe     string
 	// sub — вторая часть команды, например install у service.
 	sub string
@@ -99,6 +102,7 @@ func printUsage() {
   watch     наблюдение и учёт без блокировки экрана
   run       наблюдение с блокировкой экрана в одном процессе
   enroll    привязать устройство: -server <адрес> -token <токен>
+            [-child-url <адрес>] — что написать ребёнку на закрытом экране
   version   версия
 
 Боевой режим — два процесса:
@@ -159,7 +163,7 @@ func run(cmd string, o options) error {
 	p := pathsIn(o.dataDir)
 
 	if cmd == "enroll" {
-		return enroll(p.enrollment, o.server, o.token)
+		return enroll(p.enrollment, o.server, o.token, o.childURL)
 	}
 	if cmd == "service" {
 		return serviceCommand(o.sub)
@@ -227,11 +231,12 @@ func run(cmd string, o options) error {
 	case "status":
 		return status(a, lnk, clk, source, localPolicy, enrollment, p)
 	case "watch", "run":
-		return loop(a, lnk, clk, source, localPolicy, p, o.interval, cmd == "run")
+		return loop(a, lnk, clk, source, localPolicy, p, o.interval, cmd == "run", enrollment.ChildURL)
 	case "serve":
 		return serve(assembled{
 			agent: a, link: lnk, clock: clk, source: source,
 			localPolicy: localPolicy, paths: p, remote: remote,
+			childURL: enrollment.ChildURL,
 		}, o)
 	default:
 		printUsage()
@@ -250,17 +255,23 @@ type assembled struct {
 	paths       paths
 	// remote — рабочий стол, который наполняет помощник. Только у serve.
 	remote *ipc.Desktop
+	// childURL — что написать ребёнку на закрытом экране. Пусто, если адрес
+	// заданий при привязке не назвали.
+	childURL string
 }
 
-func enroll(path, server, token string) error {
+func enroll(path, server, token, childURL string) error {
 	if server == "" || token == "" {
 		return fmt.Errorf("нужны оба флага: -server и -token")
 	}
-	e := config.Enrollment{ServerURL: server, DeviceToken: token}
+	e := config.Enrollment{ServerURL: server, DeviceToken: token, ChildURL: childURL}
 	if err := config.SaveEnrollment(path, e); err != nil {
 		return err
 	}
 	fmt.Printf("устройство привязано: %s\n", e.Redacted())
+	if e.ChildURL == "" {
+		fmt.Println("адрес заданий не задан: на закрытом экране ребёнку не будет сказано, куда идти")
+	}
 	fmt.Printf("файл: %s\n", path)
 	return nil
 }
@@ -325,7 +336,8 @@ func status(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Sourc
 }
 
 func loop(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Source,
-	localPolicy config.Policy, p paths, interval time.Duration, enforcing bool) error {
+	localPolicy config.Policy, p paths, interval time.Duration, enforcing bool,
+	childURL string) error {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -383,6 +395,18 @@ func loop(a *agent.Agent, lnk *link.Link, clk *clock.Clock, source clock.Source,
 		if changed {
 			fmt.Printf("политика обновлена (%s)\n", res.Source)
 		}
+
+		// То, что окажется на закрытом экране. Обновляем здесь, а не при
+		// блокировке: в момент блокировки ходить на сервер уже поздно.
+		sc := screen.Context{
+			CreditsPerMinute: res.CreditsPerMinute,
+			TomorrowMinutes:  a.TomorrowLimit(time.Now()),
+			ChildURL:         childURL,
+		}
+		if res.Online {
+			sc.Minutes, sc.Credits = res.Balances.Minutes, res.Balances.Credits
+		}
+		a.SetScreen(sc)
 	}
 	// Сначала политика: от дневной выдачи считается ограничение списания, и
 	// по локальной оно вышло бы не тем, что задал родитель.
