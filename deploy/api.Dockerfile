@@ -43,6 +43,9 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY packages/ packages/
 COPY server/api/ server/api/
 COPY --from=web /app/server/admin-ui/dist server/admin-ui/dist
+# Пакеты заданий: без них ребёнку нечем зарабатывать кредиты, и вся
+# экономика держится на ручных начислениях родителя.
+COPY content/packs/ content/packs/
 
 # Клиент Prisma генерируется под платформу образа, а не хостовую
 RUN npx prisma generate --schema server/api/prisma/schema.prisma

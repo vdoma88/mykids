@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useState, type FormEvent } from 'react';
 import type { TimeWindow } from '@mykids/contracts';
 import { api, deviceToken, ApiError } from '../api.js';
+import { Tasks } from './Tasks.js';
 import { ErrorBox, Loading, useAsync } from '../components/Async.js';
 
 const DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -107,6 +108,10 @@ export function ChildApp(): JSX.Element {
 
           {actionErr && <div className="err">{actionErr}</div>}
           {actionOk && <div className="ok-box">{actionOk}</div>}
+
+          <div className="card">
+            <Tasks onEarned={() => setReloadKey((k) => k + 1)} />
+          </div>
 
           <div className="card">
             <h3>Обменять кредиты на время</h3>

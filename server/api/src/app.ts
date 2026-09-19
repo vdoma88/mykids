@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -24,6 +24,26 @@ export interface AppOptions {
    * закрытом экране.
    */
   webRoot?: string | undefined;
+  /**
+   * Каталог с пакетами заданий. Если задан и существует, сервер отдаёт их
+   * ребёнку — иначе зарабатывать кредиты ему нечем.
+   *
+   * Без проверки токена: правильные ответы всё равно попадают в браузер,
+   * потому что проверяет ответы он сам. Приватная часть — не содержание
+   * пакетов, а то, какие из них назначены этому ребёнку, и она остаётся
+   * за «/child/packs».
+   */
+  contentRoot?: string | undefined;
+}
+
+/** Пакет в каталоге — то, что видно родителю при назначении. */
+export interface PackSummary {
+  id: string;
+  title: string;
+  subject: string;
+  version: string;
+  itemCount: number;
+  description?: string;
 }
 
 export interface Services {
@@ -31,6 +51,12 @@ export interface Services {
   auth: AuthService;
   economy: EconomyService;
   ledger: LedgerService;
+  /**
+   * Каталог пакетов заданий: читается оттуда же, откуда отдаётся содержимое.
+   * Отдельным списком в базе он разъехался бы с каталогом на диске, и
+   * родитель назначал бы ребёнку пакет, которого нет.
+   */
+  catalog: () => PackSummary[];
 }
 
 declare module 'fastify' {
@@ -43,6 +69,26 @@ declare module 'fastify' {
 export class HttpError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
     super(message);
+  }
+}
+
+/**
+ * Читает каталог пакетов с диска при каждом обращении.
+ *
+ * Без кэша намеренно: пакеты добавляют редко, а перезапускать сервер ради
+ * нового пакета — та мелочь, из-за которой контент перестают добавлять вовсе.
+ */
+function readCatalog(contentRoot: string | undefined): PackSummary[] {
+  if (!contentRoot) return [];
+  const index = join(contentRoot, 'index.json');
+  if (!existsSync(index)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(index, 'utf8')) as { packs?: PackSummary[] };
+    return raw.packs ?? [];
+  } catch {
+    // Битый индекс не должен ронять весь сервер: без каталога родитель не
+    // назначит пакеты, но всё остальное работает.
+    return [];
   }
 }
 
@@ -73,7 +119,7 @@ export function underPrefix(url: string, prefix: string): boolean {
  */
 export function isApiRequest(url: string): boolean {
   if (pathOf(url).startsWith('/child/')) return true;
-  return ['/auth', '/admin', '/agent', '/health'].some((p) => underPrefix(url, p));
+  return ['/auth', '/admin', '/agent', '/health', '/content'].some((p) => underPrefix(url, p));
 }
 
 /** Достаёт токен из заголовка Authorization. */
@@ -89,6 +135,7 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
     auth: new AuthService(prisma),
     economy: new EconomyService(prisma),
     ledger: new LedgerService(prisma),
+    catalog: () => readCatalog(options.contentRoot),
   };
 
   const app = Fastify({ logger: false });
@@ -141,6 +188,7 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
   registerChildRoutes(app, services);
   registerAgentRoutes(app, services);
 
+  registerContent(app, options.contentRoot);
   registerWeb(app, options.webRoot);
 
   return app;
@@ -151,6 +199,27 @@ function wantsPage(req: FastifyRequest): boolean {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
   const accept = req.headers.accept ?? '';
   return accept.includes('text/html');
+}
+
+/**
+ * Отдаёт пакеты заданий.
+ *
+ * Читает их раннер в браузере ребёнка тем же загрузчиком, что и страница
+ * локального прогона: pack.json и файлы заданий по одному. Поэтому здесь
+ * обычная раздача каталога, а не свой формат — иначе загрузчиков стало бы
+ * два, и разошлись бы они молча.
+ */
+function registerContent(app: FastifyInstance, contentRoot: string | undefined): void {
+  if (!contentRoot || !existsSync(join(contentRoot, 'index.json'))) {
+    return;
+  }
+  void app.register(fastifyStatic, {
+    root: contentRoot,
+    prefix: '/content/packs/',
+    // Раздача уже одна зарегистрирована для страниц; повторно украшать
+    // reply.sendFile плагин не даст.
+    decorateReply: false,
+  });
 }
 
 /**

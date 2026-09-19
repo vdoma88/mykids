@@ -168,7 +168,14 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' \
                  http://127.0.0.1:3000/agent/sync)
           [ "$code" = 401 ] || { echo "/agent/sync ответил $code вместо 401" >&2; exit 1; }
-          echo "образ отдаёт и страницы, и API"
+
+          # Пакеты заданий в образе: без них ребёнку нечем зарабатывать,
+          # и вся экономика держится на ручных начислениях родителя.
+          packs=$(curl -fsS http://127.0.0.1:3000/content/packs/index.json) || {
+            echo "в образе нет пакетов заданий" >&2; exit 1; }
+          echo "$packs" | grep -q '"id"' || {
+            echo "каталог пакетов пуст: $packs" >&2; exit 1; }
+          echo "образ отдаёт страницы, API и задания"
 
       - name: Логи при падении
         if: failure()

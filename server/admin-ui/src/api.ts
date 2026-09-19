@@ -98,6 +98,16 @@ export interface ChildMe {
 
 // ------------------------------------------------------------------- вызовы
 
+/** Пакет заданий в каталоге сервера. */
+export interface PackSummary {
+  id: string;
+  title: string;
+  subject: string;
+  version: string;
+  itemCount: number;
+  description?: string;
+}
+
 export const api = {
   login: (body: { email: string; password: string; totp?: string }) =>
     request<{ token: string; expiresAt: string }>('/auth/login', {
@@ -115,6 +125,13 @@ export const api = {
   children: () => asParent<ChildSummary[]>('/admin/children'),
   addChild: (body: { name: string; birthYear?: number }) =>
     asParent<{ id: string }>('/admin/children', { method: 'POST', body: JSON.stringify(body) }),
+
+  packs: (childId: string) =>
+    asParent<{ assigned: string[]; catalog: PackSummary[] }>(`/admin/children/${childId}/packs`),
+  savePacks: (childId: string, packs: string[]) =>
+    asParent<{ assigned: string[] }>(`/admin/children/${childId}/packs`, {
+      method: 'PUT', body: JSON.stringify({ packs }),
+    }),
 
   policy: (childId: string) => asParent<Policy>(`/admin/children/${childId}/policy`),
   savePolicy: (childId: string, body: unknown) =>
@@ -161,4 +178,22 @@ export const api = {
     asDevice<{ purchaseId: string; balances: Balances }>('/child/purchases', {
       method: 'POST', body: JSON.stringify({ storeItemId }),
     }),
+
+  /** Какие пакеты назначены этому ребёнку. Содержимое лежит в /content/packs. */
+  childPacks: () => asDevice<{ packs: string[] }>('/child/packs'),
+
+  /**
+   * Результат одного задания.
+   *
+   * Сумму кредитов назначает сервер, а не эта страница: потолки, cooldown и
+   * дневной предел применяются там. Раннер крутится на устройстве ребёнка,
+   * и доверять его арифметике нельзя.
+   */
+  childAttempt: (body: {
+    packId: string; itemId: string; score: number; baseCredits: number;
+    packDailyCreditCap: number; cooldownHours?: number;
+  }) =>
+    asDevice<{ credits: number; withheldReason?: string; balances: Balances }>(
+      '/child/attempts', { method: 'POST', body: JSON.stringify(body) },
+    ),
 };

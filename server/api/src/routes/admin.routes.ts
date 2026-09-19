@@ -74,6 +74,52 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
     return reply.status(201).send({ id: child.id });
   });
 
+  /**
+   * Пакеты заданий ребёнка: что назначено и что вообще есть.
+   *
+   * Каталог сервер читает там же, откуда отдаёт содержимое, а не хранит
+   * отдельным списком в базе: два списка разъехались бы, и родитель назначал
+   * бы пакет, которого нет.
+   */
+  app.get('/admin/children/:childId/packs', async (req) => {
+    const { childId } = z.object({ childId: z.string().uuid() }).parse(req.params);
+    await assertOwnChild(s, req.guardian!.familyId, childId);
+
+    const assigned = await s.prisma.packAssignment.findMany({
+      where: { childId, enabled: true },
+      select: { packId: true },
+    });
+    return { assigned: assigned.map((a) => a.packId), catalog: s.catalog() };
+  });
+
+  /** Полностью задаёт набор: что не прислали — снимается. */
+  app.put('/admin/children/:childId/packs', async (req) => {
+    assertCanEdit(req.guardian!.role);
+    const { childId } = z.object({ childId: z.string().uuid() }).parse(req.params);
+    await assertOwnChild(s, req.guardian!.familyId, childId);
+    const { packs } = z.object({ packs: z.array(z.string().min(1)).max(200) }).parse(req.body);
+
+    // Назначить можно только то, что есть в каталоге: иначе ребёнок увидит
+    // пакет, который не загрузится, и решит, что сломалось у него.
+    const known = new Set(s.catalog().map((p) => p.id));
+    const unknown = packs.filter((id) => !known.has(id));
+    if (unknown.length > 0) {
+      throw new HttpError(400, 'unknown_pack', `Нет таких пакетов: ${unknown.join(', ')}`);
+    }
+
+    // Снятые пакеты удаляем, а не помечаем: попытки и начисления живут в
+    // журнале отдельно, и терять с назначением нечего.
+    await s.prisma.$transaction([
+      s.prisma.packAssignment.deleteMany({ where: { childId, packId: { notIn: packs } } }),
+      ...packs.map((packId) => s.prisma.packAssignment.upsert({
+        where: { childId_packId: { childId, packId } },
+        create: { childId, packId, enabled: true },
+        update: { enabled: true },
+      })),
+    ]);
+    return { assigned: packs };
+  });
+
   app.get('/admin/children/:childId/policy', async (req) => {
     const { childId } = z.object({ childId: z.string().uuid() }).parse(req.params);
     await assertOwnChild(s, req.guardian!.familyId, childId);

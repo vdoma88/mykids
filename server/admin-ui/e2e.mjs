@@ -58,6 +58,37 @@ async function expectBalance(page, testid, want) {
   }
 }
 
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Отвечает на задание правильно.
+ *
+ * Варианты рендерер перемешивает, поэтому ищем по тексту, а не по номеру:
+ * тест, завязанный на порядок, начал бы врать ровно тогда, когда порядок
+ * поменяют.
+ */
+async function answerItem(page, item) {
+  const host = page.locator('[data-testid="task-host"]');
+  switch (item.type) {
+    case 'numeric':
+      await host.locator('input').first().fill(String(item.answer.value));
+      break;
+    case 'single_choice':
+      await host.locator('label.opt', { hasText: item.options[item.answerIndex].text })
+        .locator('input').check();
+      break;
+    case 'short_text':
+      await host.locator('input, textarea').first().fill(item.answer.accepted[0]);
+      break;
+    default:
+      throw new Error(`тест не умеет отвечать на задание типа ${item.type}`);
+  }
+}
+
 async function waitFor(url, tries = 80) {
   for (let i = 0; i < tries; i++) {
     try { if ((await fetch(url)).ok) return; } catch { /* ещё не поднялся */ }
@@ -149,6 +180,13 @@ async function main() {
     const token = (await page.getByTestId('device-token').textContent()).trim();
     assert.ok(token.length > 20, 'токен устройства не выдан');
 
+    // --- пакеты заданий: без них ребёнку нечем зарабатывать кредиты,
+    // и весь остальной экран у него бессмыслен
+    const pack = 'ru.mykids.physics.mechanics.basic';
+    await page.check(`[data-testid="pack-${pack}"]`);
+    await page.getByTestId('save-packs').click();
+    await page.waitForSelector('[data-testid="packs-saved"]');
+
     // --- магазин
     await page.click('a:has-text("Магазин")');
     await page.fill('#st-title', '+30 минут');
@@ -191,6 +229,33 @@ async function main() {
     await page.fill('#conv', '5');
     await page.getByRole('button', { name: 'Обменять' }).click();
     await page.waitForSelector('.err');
+
+    // --- задания: ради них всё и затевалось. Ребёнок с нулём кредитов
+    // должен иметь возможность их заработать, не прося у родителя.
+    await page.waitForSelector(`[data-testid="pack-${pack}"]`);
+    await page.getByRole('button', { name: 'Решать' }).click();
+    await page.waitForSelector('[data-testid="task-host"] .stem');
+
+    // Отвечаем правильно, подсмотрев ответ в том же файле, который отдаёт
+    // сервер. Проверять надо именно начисление: круг «решил — получил
+    // кредиты — обменял на время» и есть вся суть системы, и до сих пор он
+    // был разорван, потому что решать было негде.
+    const stem = await page.locator('[data-testid="task-host"] .stem').textContent();
+    const items = await fetchJson(`${base}/content/packs/${pack}/pack.json`);
+    let answered = false;
+    for (const rel of items.items) {
+      const item = await fetchJson(`${base}/content/packs/${pack}/${rel}`);
+      if (item.stem !== stem) continue;
+      await answerItem(page, item);
+      answered = true;
+      break;
+    }
+    assert.ok(answered, `задание «${stem}» не нашлось в пакете`);
+
+    await page.getByTestId('task-submit').click();
+    await page.waitForSelector('[data-testid="task-note"]');
+    const note = await page.getByTestId('task-note').textContent();
+    assert.match(note, /Верно\. \+\d+ кредит/, `за верный ответ не начислено: ${note}`);
 
     assert.deepEqual(errors, [], 'в консоли есть ошибки приложения');
     console.log('admin-ui e2e: все проверки пройдены');
