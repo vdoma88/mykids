@@ -164,7 +164,7 @@ func run(cmd string, o options) error {
 		return runHelper(o)
 	}
 	if cmd == "service" {
-		return serviceCommand(o.sub)
+		return serviceCommand(o.sub, o)
 	}
 
 	if err := os.MkdirAll(o.dataDir, 0o755); err != nil {

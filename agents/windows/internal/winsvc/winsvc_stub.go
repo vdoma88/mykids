@@ -15,9 +15,9 @@ var ErrNotWindows = errors.New("служба доступна только в Wi
 // Body — работа службы.
 type Body func(ctx context.Context, log func(string, ...any)) error
 
-func InService() bool        { return false }
-func Run(Body) error         { return ErrNotWindows }
-func Install() error         { return ErrNotWindows }
-func Uninstall() error       { return ErrNotWindows }
-func Start() error           { return ErrNotWindows }
-func Query() (string, error) { return "", ErrNotWindows }
+func InService() bool         { return false }
+func Run(Body) error          { return ErrNotWindows }
+func Install(...string) error { return ErrNotWindows }
+func Uninstall() error        { return ErrNotWindows }
+func Start() error            { return ErrNotWindows }
+func Query() (string, error)  { return "", ErrNotWindows }
