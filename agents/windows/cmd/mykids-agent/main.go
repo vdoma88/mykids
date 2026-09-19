@@ -38,7 +38,7 @@ import (
 // Не константа намеренно: релизная сборка подменяет её через
 // -ldflags "-X main.version=...", а линковщик умеет это только с переменными и
 // на константу не действует — молча, без единого предупреждения.
-var version = "0.3.0"
+var version = "0.4.0"
 
 // syncEvery — как часто агент ходит на сервер. Реже, чем опрашивает рабочий
 // стол: расписание меняется редко, а расход всё равно копится в очереди.
@@ -154,6 +154,19 @@ func run(cmd string, o options) error {
 		return nil
 	}
 
+	// Помощник — раньше каталога данных, и это важно. Он работает с правами
+	// ребёнка, а каталог данных закрыт от ребёнка нарочно: там состояние
+	// учёта и очередь расхода. Помощнику он и не нужен — всё, что ему надо,
+	// приходит по каналу от службы. Тронув каталог здесь, помощник падал бы
+	// на правах, служба поднимала бы его снова и снова, и через пять раз
+	// обвинила бы ребёнка в снятии наблюдателя, которого он не трогал.
+	if cmd == "helper" {
+		return runHelper(o)
+	}
+	if cmd == "service" {
+		return serviceCommand(o.sub)
+	}
+
 	if err := os.MkdirAll(o.dataDir, 0o755); err != nil {
 		return fmt.Errorf("каталог данных %s: %w", o.dataDir, err)
 	}
@@ -161,12 +174,6 @@ func run(cmd string, o options) error {
 
 	if cmd == "enroll" {
 		return enroll(p.enrollment, o.server, o.token, o.childURL)
-	}
-	if cmd == "service" {
-		return serviceCommand(o.sub)
-	}
-	if cmd == "helper" {
-		return runHelper(o)
 	}
 
 	localPolicy, err := config.Load(p.policy)

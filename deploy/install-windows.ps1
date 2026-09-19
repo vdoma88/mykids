@@ -51,13 +51,32 @@ function Check-ChildAccount([string]$name) {
         Write-Warning 'Убедитесь сами, что она обычная, а не администратор.'
         return
     }
-    $user = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
-    if (-not $user) {
+
+    # Команды работы с локальными учётными записями есть не в каждой сборке
+    # PowerShell. Не сумев проверить, установку не срываем, но и молчать не
+    # имеем права: это единственное условие, без которого агент бесполезен.
+    try {
+        $user = Get-LocalUser -Name $name -ErrorAction Stop
+    } catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
         Write-Warning "Учётной записи «$name» на этой машине нет. Заведите её как обычную (не администратора)."
         return
+    } catch {
+        Write-Warning "Не удалось проверить учётную запись «$name»: $($_.Exception.Message)"
+        Write-Warning 'Убедитесь сами, что она обычная, а не администратор.'
+        return
     }
-    $admins = Get-LocalGroupMember -Group (Get-LocalGroup -SID 'S-1-5-32-544').Name -ErrorAction SilentlyContinue
-    if ($admins | Where-Object { $_.SID -eq $user.SID }) {
+
+    $inAdmins = $false
+    try {
+        $admins = Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop
+        $inAdmins = [bool]($admins | Where-Object { $_.SID -eq $user.SID })
+    } catch {
+        Write-Warning "Не удалось прочитать группу «Администраторы»: $($_.Exception.Message)"
+        Write-Warning 'Проверьте сами, что учётная запись ребёнка в неё не входит.'
+        return
+    }
+
+    if ($inAdmins) {
         throw @"
 Учётная запись «$name» состоит в администраторах.
 Ребёнок с правами администратора остановит службу из оснастки, и агент не
