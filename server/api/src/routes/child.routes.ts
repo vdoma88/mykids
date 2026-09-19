@@ -1,14 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { Services } from '../app.js';
+import { pathOf, type Services } from '../app.js';
 
 /**
  * То, что видит и делает ребёнок. Доступ по токену устройства: раннер живёт
  * на том же устройстве, что и агент.
  */
 export function registerChildRoutes(app: FastifyInstance, s: Services): void {
+  // Глубже «/child», а не «/child» целиком: сам «/child» — это страница
+  // ребёнка, которую отдаёт сервер, и токен вводят уже на ней. Запросы со
+  // страницы без токена устройства не отвечают.
   app.addHook('onRequest', async (req) => {
-    if (req.url.startsWith('/child')) await app.requireDevice(req);
+    if (pathOf(req.url).startsWith('/child/')) await app.requireDevice(req);
   });
 
   /** Баланс, правила и остаток — то же, что ребёнок видит у себя на экране. */

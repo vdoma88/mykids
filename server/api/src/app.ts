@@ -1,4 +1,7 @@
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import fastifyStatic from '@fastify/static';
 import type { PrismaClient, Guardian, Device } from '@prisma/client';
 import { AuthError, AuthService } from './services/auth.service.js';
 import { EconomyService, NotFoundError, RuleError } from './services/economy.service.js';
@@ -7,6 +10,21 @@ import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
 import { registerChildRoutes } from './routes/child.routes.js';
 import { registerAgentRoutes } from './routes/agent.routes.js';
+
+/** Настройки сборки приложения. */
+export interface AppOptions {
+  /**
+   * Каталог собранного интерфейса. Если задан и существует, сервер отдаёт
+   * его с того же адреса, что и API.
+   *
+   * Одним адресом, а не двумя: семья разворачивает это дома, и «откройте
+   * админку на 5174, а API живёт на 3000» — это ровно та инструкция, на
+   * которой домашнее развёртывание и заканчивается. Заодно отпадает CORS
+   * и становится настоящим адрес заданий, который агент пишет ребёнку на
+   * закрытом экране.
+   */
+  webRoot?: string | undefined;
+}
 
 export interface Services {
   prisma: PrismaClient;
@@ -28,6 +46,36 @@ export class HttpError extends Error {
   }
 }
 
+/** Путь без строки запроса. */
+export function pathOf(url: string): string {
+  return url.split('?')[0] ?? '';
+}
+
+/**
+ * Лежит ли путь под префиксом — сам префикс или что-то глубже него.
+ *
+ * Именно с границей, а не просто startsWith: «/children» начинается с
+ * «/child», но это страница родителя, а не запрос ребёнка. Проверка без
+ * границы отдавала родителю 401 на его собственном списке детей, и нашлось
+ * это только тогда, когда сервер начал отдавать страницы.
+ */
+export function underPrefix(url: string, prefix: string): boolean {
+  const path = pathOf(url);
+  return path === prefix || path.startsWith(prefix + '/');
+}
+
+/**
+ * Запрос к API, а не к странице.
+ *
+ * «/child» — особый случай, и обойти его нечем: сама страница ребёнка и
+ * есть «/child», а всё, что глубже, — её запросы к серверу. Развести их
+ * можно только по границе пути.
+ */
+export function isApiRequest(url: string): boolean {
+  if (pathOf(url).startsWith('/child/')) return true;
+  return ['/auth', '/admin', '/agent', '/health'].some((p) => underPrefix(url, p));
+}
+
 /** Достаёт токен из заголовка Authorization. */
 function bearer(req: FastifyRequest): string | null {
   const header = req.headers.authorization;
@@ -35,7 +83,7 @@ function bearer(req: FastifyRequest): string | null {
   return header.slice('Bearer '.length).trim() || null;
 }
 
-export function buildApp(prisma: PrismaClient): FastifyInstance {
+export function buildApp(prisma: PrismaClient, options: AppOptions = {}): FastifyInstance {
   const services: Services = {
     prisma,
     auth: new AuthService(prisma),
@@ -93,7 +141,40 @@ export function buildApp(prisma: PrismaClient): FastifyInstance {
   registerChildRoutes(app, services);
   registerAgentRoutes(app, services);
 
+  registerWeb(app, options.webRoot);
+
   return app;
+}
+
+/** Просит ли браузер страницу, а не JSON. */
+function wantsPage(req: FastifyRequest): boolean {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const accept = req.headers.accept ?? '';
+  return accept.includes('text/html');
+}
+
+/**
+ * Отдаёт собранный интерфейс с того же адреса, что и API.
+ *
+ * Роутинг у React свой, поэтому неизвестный путь — это не обязательно ошибка:
+ * это может быть ссылка вроде /children/42, которую сервер видит впервые.
+ * Такие отдаём index.html. Но только их: неизвестный путь под /admin/ или
+ * /agent/ — настоящая ошибка, и отвечать на неё страницей значило бы
+ * прятать опечатку в адресе от того, кто её сделал.
+ */
+function registerWeb(app: FastifyInstance, webRoot: string | undefined): void {
+  if (!webRoot || !existsSync(join(webRoot, 'index.html'))) {
+    return;
+  }
+
+  void app.register(fastifyStatic, { root: webRoot, wildcard: false });
+
+  app.setNotFoundHandler((req: FastifyRequest, reply: FastifyReply) => {
+    if (!wantsPage(req) || isApiRequest(req.url)) {
+      return reply.status(404).send({ error: 'not_found', message: 'Нет такого пути.' });
+    }
+    return reply.sendFile('index.html');
+  });
 }
 
 declare module 'fastify' {

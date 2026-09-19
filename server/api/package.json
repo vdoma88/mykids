@@ -13,12 +13,13 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.4",
     "@mykids/contracts": "*",
     "@mykids/domain": "*",
-    "@prisma/client": "^6.2.1",
     "@node-rs/argon2": "^2.0.2",
-    "otpauth": "^9.3.6",
+    "@prisma/client": "^6.2.1",
     "fastify": "^5.2.1",
+    "otpauth": "^9.3.6",
     "zod": "^3.24.1"
   },
   "devDependencies": {

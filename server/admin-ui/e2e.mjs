@@ -4,57 +4,25 @@
  *   npm run build -w @mykids/admin-ui
  *   node server/admin-ui/e2e.mjs
  *
- * Поднимает API и статику собранной админки, затем проходит путь родителя
- * целиком: регистрация, ребёнок, политика, устройство, корректировка — и путь
- * ребёнка: баланс, правила, обмен. Проверяет то, что не видно из юнит-тестов:
- * что фронт и API действительно договариваются.
+ * Поднимает настоящий сервер — тот самый, что уходит в релиз, — и проходит
+ * путь родителя целиком: регистрация, ребёнок, политика, устройство,
+ * корректировка, — и путь ребёнка: баланс, правила, обмен. Проверяет то,
+ * что не видно из юнит-тестов: что фронт и API действительно договариваются.
+ *
+ * Раньше здесь стоял самодельный сервер статики с проксированием API, и он
+ * повторял разбор путей своими руками. Тест против собственной копии сервера
+ * проверяет копию: разойтись они могут молча, и разойдётся та, которую реже
+ * смотрят. Теперь страницы отдаёт сам API, и проверять надо его.
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
-import { createReadStream, existsSync, statSync } from 'node:fs';
-import { createServer, request as httpRequest } from 'node:http';
-import { extname, join, normalize } from 'node:path';
 import assert from 'node:assert/strict';
 
 const API_PORT = 3199;
-const UI_PORT = 5199;
 const DIST = new URL('./dist/', import.meta.url).pathname;
 const API_DIR = new URL('../api/', import.meta.url).pathname;
 const DB = process.env.DATABASE_URL_E2E
   ?? 'postgresql://postgres@127.0.0.1:5433/mykids_e2e';
-
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-                '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8' };
-
-/** Статика админки с проксированием API: так же, как за обратным прокси в бою. */
-function startUi() {
-  return createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    const path = decodeURIComponent(url.pathname);
-
-    if (/^\/(auth|admin|agent|health)(\/|$)/.test(path)
-        || (path.startsWith('/child/') && req.method !== 'GET')
-        || ['/child/me', '/child/store', '/child/packs'].includes(path)) {
-      const upstream = httpRequest(
-        { host: '127.0.0.1', port: API_PORT, path: req.url, method: req.method, headers: req.headers },
-        (up) => { res.writeHead(up.statusCode ?? 502, up.headers); up.pipe(res); },
-      );
-      upstream.on('error', () => { res.writeHead(502).end('нет API'); });
-      req.pipe(upstream);
-      return;
-    }
-
-    const file = normalize(join(DIST, path));
-    if (file.startsWith(DIST) && existsSync(file) && statSync(file).isFile()) {
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-      createReadStream(file).pipe(res);
-      return;
-    }
-    // SPA: любой неизвестный путь отдаёт index.html
-    res.writeHead(200, { 'content-type': TYPES['.html'] });
-    createReadStream(join(DIST, 'index.html')).pipe(res);
-  }).listen(UI_PORT);
-}
 
 /** Чужой процесс на нашем порту сделал бы результат теста бессмысленным. */
 async function assertPortFree(port) {
@@ -104,13 +72,16 @@ async function main() {
   // в устаревший процесс и проверяет не тот код.
   const api = spawn('npx', ['tsx', 'src/main.ts'], {
     cwd: API_DIR, stdio: 'ignore', detached: true,
-    env: { ...process.env, DATABASE_URL: DB, PORT: String(API_PORT) },
+    env: {
+      ...process.env, DATABASE_URL: DB, PORT: String(API_PORT),
+      // Страницы отдаёт сам сервер: проверяем то, что уходит в релиз.
+      MYKIDS_WEB_ROOT: DIST,
+    },
   });
   const stopApi = () => {
     try { process.kill(-api.pid, 'SIGTERM'); } catch { /* уже мёртв */ }
   };
   process.on('exit', stopApi);
-  const ui = startUi();
   let browser;
   let page;
   const errors = [];
@@ -118,7 +89,6 @@ async function main() {
   try {
     await assertPortFree(API_PORT);
     await waitFor(`http://127.0.0.1:${API_PORT}/health`);
-    await waitFor(`http://127.0.0.1:${UI_PORT}/`);
 
     browser = await chromium.launch({
       executablePath: process.env.CHROMIUM_PATH || undefined,
@@ -134,7 +104,7 @@ async function main() {
       }
     });
 
-    const base = `http://127.0.0.1:${UI_PORT}`;
+    const base = `http://127.0.0.1:${API_PORT}`;
     const email = `p${Date.now()}@example.com`;
 
     // --- родитель: регистрация
@@ -237,7 +207,6 @@ async function main() {
     throw err;
   } finally {
     await browser?.close();
-    ui.close();
     stopApi();
   }
 }

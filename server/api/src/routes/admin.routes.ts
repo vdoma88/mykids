@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { policySchema, storeItemSchema, timeWindowSchema } from '@mykids/contracts';
-import type { Services } from '../app.js';
+import { underPrefix, type Services } from '../app.js';
 import { HttpError } from '../app.js';
 
 /** Проверяет, что ребёнок принадлежит семье вошедшего родителя. */
@@ -32,7 +32,7 @@ const policyBody = z.object({
 
 export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
   app.addHook('onRequest', async (req) => {
-    if (req.url.startsWith('/admin')) await app.requireGuardian(req);
+    if (underPrefix(req.url, '/admin')) await app.requireGuardian(req);
   });
 
   app.get('/admin/children', async (req) => {
