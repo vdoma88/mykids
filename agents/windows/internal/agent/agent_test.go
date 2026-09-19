@@ -1,13 +1,13 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
 	"github.com/vdoma88/mykids/agents/windows/internal/schedule"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
-	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 )
 
 type fakeDesktop struct {
@@ -91,8 +91,11 @@ func TestBlocksWhenTimeRunsOut(t *testing.T) {
 	if e.blocks != 1 {
 		t.Errorf("блокировка сработала %d раз, ожидался один переход", e.blocks)
 	}
+	// Не любой непустой текст: именно про кончившийся лимит, а не про
+	// расписание. Ребёнку, у которого просто кончилось время, надпись
+	// «сейчас отбой» ничего не объясняет.
 	last := e.messages[len(e.messages)-1]
-	if last == "" || last == BlockMessage(usage.Verdict{Window: "отбой"}) {
+	if !strings.Contains(last, "кончилось") || strings.Contains(last, "Сейчас") {
 		t.Errorf("неверное сообщение блокировки: %q", last)
 	}
 }

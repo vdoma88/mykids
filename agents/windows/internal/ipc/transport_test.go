@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 )
 
 // listen поднимает службу на временном адресе и обслуживает всех помощников.
@@ -41,7 +43,11 @@ func listen(t *testing.T, h Handler) (string, *Desktop) {
 func TestTwoProcessSplitEndToEnd(t *testing.T) {
 	// То, ради чего всё разделение: помощник видит рабочий стол, служба решает.
 	addr, desktop := listen(t, func(s Sample) Verdict {
-		return Verdict{Allow: s.Process != "game.exe", LeftSecs: 600, Message: "хватит"}
+		return Verdict{
+			Allow:    s.Process != "game.exe",
+			LeftSecs: 600,
+			Screen:   screen.Screen{Kind: screen.Block, Title: "Время на сегодня кончилось"},
+		}
 	})
 
 	conn, err := DialAddr(addr)
@@ -63,7 +69,7 @@ func TestTwoProcessSplitEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Exchange: %v", err)
 	}
-	if v.Allow || v.Message != "хватит" {
+	if v.Allow || v.Screen.Title != "Время на сегодня кончилось" {
 		t.Fatalf("решение службы не дошло: %+v", v)
 	}
 

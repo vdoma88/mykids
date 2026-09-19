@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 )
 
 // Grace — сколько терпеть недоступность службы, прежде чем закрыть экран.
@@ -18,27 +19,26 @@ import (
 // перезапуск, а отсутствие.
 const Grace = 30 * time.Second
 
-// Screen — что должно быть на экране.
-type Screen struct {
-	Block   bool
-	Message string
-}
-
 // OnVerdict — экран по решению службы.
 //
 // Текст берётся у службы и здесь не придумывается: помощник работает с правами
 // ребёнка, и позволить ему сочинять надпись значило бы позволить подменённому
-// помощнику написать что угодно. Своё сообщение — только когда служба не дала
-// никакого, иначе ребёнок увидел бы пустой чёрный экран без объяснений.
-func OnVerdict(v ipc.Verdict) Screen {
+// помощнику написать что угодно — хоть «всё в порядке, играй дальше». Своё —
+// только заголовок на случай, когда служба не дала никакого: пустой чёрный
+// экран без объяснений хуже любого текста.
+func OnVerdict(v ipc.Verdict) screen.Screen {
+	s := v.Screen
 	if v.Allow {
-		return Screen{}
+		if s.Kind != screen.Warn {
+			return screen.Screen{}
+		}
+		return s
 	}
-	msg := v.Message
-	if msg == "" {
-		msg = "Экран закрыт."
+	s.Kind = screen.Block
+	if s.Title == "" {
+		s.Title = "Экран закрыт"
 	}
-	return Screen{Block: true, Message: msg}
+	return s
 }
 
 // OnServiceLost — экран, когда службы не слышно уже since.
@@ -46,14 +46,20 @@ func OnVerdict(v ipc.Verdict) Screen {
 // Без службы время никто не считает. Оставить экран открытым значит раздавать
 // его даром, поэтому после Grace он закрывается. Это зеркало того же правила
 // на стороне службы: молчание собеседника — не разрешение.
-func OnServiceLost(since time.Duration) Screen {
+//
+// Ребёнку объясняем причину прямо: он не виноват, и вести себя как будто
+// виноват — значит учить его, что правила произвольны.
+func OnServiceLost(since time.Duration) screen.Screen {
 	if since < Grace {
-		return Screen{}
+		return screen.Screen{}
 	}
-	return Screen{
-		Block: true,
-		Message: fmt.Sprintf(
-			"Нет связи со службой MyKids (%s).\nЭкран откроется, когда она вернётся.",
-			since.Round(time.Second)),
+	return screen.Screen{
+		Kind:  screen.Block,
+		Title: "Нет связи со службой MyKids",
+		Lines: []string{
+			fmt.Sprintf("Она молчит уже %s — это сбой, а не наказание.", screen.Duration(since)),
+			"Экран откроется, когда она вернётся.",
+		},
+		Hint: "Если не вернётся — скажи родителям.",
 	}
 }

@@ -16,6 +16,12 @@ import (
 type Enrollment struct {
 	ServerURL   string `json:"serverUrl"`
 	DeviceToken string `json:"deviceToken"`
+	// ChildURL — адрес интерфейса ребёнка: заданий и магазина. Задаётся
+	// отдельно от ServerURL, потому что это разные вещи: API и страница живут
+	// на разных портах, а то и на разных машинах. Угадывать адрес нельзя:
+	// написать на закрытом экране ссылку, которая не открывается, — это
+	// ровно то, из-за чего подросток перестаёт верить надписям вообще.
+	ChildURL string `json:"childUrl,omitempty"`
 }
 
 // Configured сообщает, есть ли куда ходить.
@@ -60,8 +66,12 @@ func LoadEnrollment(path string) (Enrollment, error) {
 	if v := strings.TrimSpace(os.Getenv("MYKIDS_DEVICE_TOKEN")); v != "" {
 		e.DeviceToken = v
 	}
+	if v := strings.TrimSpace(os.Getenv("MYKIDS_CHILD_URL")); v != "" {
+		e.ChildURL = v
+	}
 	e.ServerURL = strings.TrimRight(strings.TrimSpace(e.ServerURL), "/")
 	e.DeviceToken = strings.TrimSpace(e.DeviceToken)
+	e.ChildURL = strings.TrimRight(strings.TrimSpace(e.ChildURL), "/")
 	return e, nil
 }
 

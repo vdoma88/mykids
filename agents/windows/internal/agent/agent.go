@@ -8,6 +8,7 @@ import (
 
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
 	"github.com/vdoma88/mykids/agents/windows/internal/schedule"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 )
@@ -36,6 +37,9 @@ type Agent struct {
 	acc     *usage.Accountant
 	st      state.State
 	blocked bool
+	// screen — остатки и курс для надписи на закрытом экране. Пустое значение
+	// даёт осмысленный текст: просто без чисел, которых агент ещё не знает.
+	screen screen.Context
 }
 
 // New собирает агента.
@@ -196,7 +200,7 @@ func (a *Agent) applyEnforcement(v usage.Verdict) error {
 		return nil
 	}
 
-	message := BlockMessage(v)
+	message := screen.Render(screen.Build(v, a.screen))
 	if !a.blocked {
 		if err := a.Enforcer.Block(message); err != nil {
 			return fmt.Errorf("блокировка: %w", err)
@@ -208,16 +212,18 @@ func (a *Agent) applyEnforcement(v usage.Verdict) error {
 	return a.Enforcer.Block(message)
 }
 
-// BlockMessage — что видит ребёнок на закрытом экране.
-func BlockMessage(v usage.Verdict) string {
-	switch {
-	case v.Window != "" && v.TasksOnly:
-		return fmt.Sprintf("Сейчас «%s» — время для заданий.\nЭкран откроется после окна.", v.Window)
-	case v.Window != "":
-		return fmt.Sprintf("Сейчас «%s».\nЭкран закрыт по расписанию.", v.Window)
-	default:
-		return "Экранное время на сегодня закончилось.\nМожно заработать ещё, решив задания."
+// SetScreen задаёт то, что агент знает про остатки ребёнка: без этого на
+// закрытом экране не из чего написать, сколько есть кредитов и что будет
+// завтра.
+func (a *Agent) SetScreen(c screen.Context) { a.screen = c }
+
+// TomorrowLimit — дневной лимит на завтра по действующей политике.
+func (a *Agent) TomorrowLimit(now time.Time) int {
+	loc, err := a.Policy.Location()
+	if err != nil {
+		return 0
 	}
+	return a.Policy.LimitFor(int(now.In(loc).AddDate(0, 0, 1).Weekday()))
 }
 
 // FormatLeft — остаток в виде «1 ч 05 мин».

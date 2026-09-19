@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/agent"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/win32"
 )
 
@@ -27,10 +28,16 @@ type overlayEnforcer struct {
 }
 
 func (e *overlayEnforcer) Block(message string) error {
-	if e.overlay != nil {
-		e.overlay.SetText(message)
+	// Помощник зовёт Block на каждом замере, а не только при смене решения.
+	// Перерисовывать одно и то же нельзя: экран будет мигать раз в пять
+	// секунд, и подросток решит, что программа сломана.
+	if e.overlay != nil && e.overlay.Alive() {
+		if e.overlay.Text() != message {
+			e.overlay.SetText(message)
+		}
 		return nil
 	}
+	e.overlay = nil
 	o, err := win32.ShowOverlay(message)
 	if err != nil {
 		if !e.locked {
@@ -52,3 +59,38 @@ func (e *overlayEnforcer) Unblock() {
 }
 
 func newEnforcer() agent.Enforcer { return &overlayEnforcer{} }
+
+// bar — полоса предупреждения. Живёт отдельно от оверлея: они показываются
+// в разное время и закрываются независимо.
+var bar *win32.Overlay
+
+// warn показывает предупреждение внизу справа, не перекрывая экран.
+//
+// Ошибку не поднимаем и работу не останавливаем: не показать предупреждение
+// неприятно, но это не повод переставать считать время.
+func warn(s screen.Screen) {
+	text := s.Title
+	if s.Hint != "" {
+		text += "\n" + s.Hint
+	}
+	if bar != nil && bar.Alive() {
+		if bar.Text() != text {
+			bar.SetText(text)
+		}
+		return
+	}
+	bar = nil
+	b, err := win32.ShowBar(text)
+	if err != nil {
+		return
+	}
+	bar = b
+}
+
+// hideWarning убирает полосу, когда предупреждать больше не о чем.
+func hideWarning() {
+	if bar != nil {
+		bar.Close()
+		bar = nil
+	}
+}

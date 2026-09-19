@@ -8,6 +8,7 @@ import (
 
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
 	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
+	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 )
 
@@ -97,19 +98,23 @@ func TestVerdictCarriesReadyMessage(t *testing.T) {
 	short.DailyLimitMinutes = []int{1, 1, 1, 1, 1, 1, 1}
 	h := newHarnessWith(t, state.State{}, nil, short)
 
+	h.core.SetChildURL("http://mykids.local/child")
+
 	h.core.Tick()
 	h.clk.advance(61 * time.Second)
 	h.core.Tick()
 
-	v := Verdict(h.core.Verdict())
+	v := Verdict(h.core.Verdict(), h.core.Context())
 	if v.Allow {
 		t.Fatalf("лимит исчерпан, а экран открыт: %+v", v)
 	}
-	if v.Message == "" {
-		t.Fatal("помощнику не дали текст для оверлея")
+	if v.Screen.Kind != screen.Block || v.Screen.Title == "" {
+		t.Fatalf("помощнику не дали, что показать: %+v", v.Screen)
 	}
-	if !strings.Contains(v.Message, "заработать") {
-		t.Fatalf("ребёнку не сказали, что делать дальше: %q", v.Message)
+	// Выход с закрытого экрана должен быть назван, иначе это не правило,
+	// а тупик. Адрес служба берёт из привязки и передаёт помощнику готовым.
+	if !strings.Contains(v.Screen.Hint, "http://mykids.local/child") {
+		t.Fatalf("ребёнку не сказали, куда идти: %+v", v.Screen)
 	}
 }
 
@@ -117,8 +122,8 @@ func TestAllowedVerdictCarriesNoMessage(t *testing.T) {
 	// Пустой текст при разрешении — не забывчивость: рисовать нечего.
 	h := newHarness(t, state.State{})
 	h.core.Tick()
-	v := Verdict(h.core.Verdict())
-	if !v.Allow || v.Message != "" {
-		t.Fatalf("при разрешённом экране пришёл текст: %+v", v)
+	v := Verdict(h.core.Verdict(), h.core.Context())
+	if !v.Allow || v.Screen.Kind != screen.None {
+		t.Fatalf("при разрешённом экране что-то показывается: %+v", v.Screen)
 	}
 }

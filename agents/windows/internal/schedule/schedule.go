@@ -107,6 +107,9 @@ func (w Window) Covers(m Moment) bool {
 type Decision struct {
 	Mode   Mode
 	Window string // имя сработавшего окна, пусто если ни одно не подошло
+	// Until — когда окно кончится, "HH:MM". Нужно ребёнку: «закрыто до 07:00»
+	// переносится куда легче, чем просто «закрыто».
+	Until string
 }
 
 // Evaluate применяет окна к моменту.
@@ -122,7 +125,7 @@ func Evaluate(windows []Window, m Moment) Decision {
 		}
 		switch w.Mode {
 		case ModeAllowed:
-			return Decision{Mode: ModeAllowed, Window: w.Name}
+			return Decision{Mode: ModeAllowed, Window: w.Name, Until: w.To}
 		case ModeBlocked:
 			if blocking == nil {
 				blocking = w
@@ -134,10 +137,10 @@ func Evaluate(windows []Window, m Moment) Decision {
 		}
 	}
 	if blocking != nil {
-		return Decision{Mode: ModeBlocked, Window: blocking.Name}
+		return Decision{Mode: ModeBlocked, Window: blocking.Name, Until: blocking.To}
 	}
 	if tasksOnly != nil {
-		return Decision{Mode: ModeTasksOnly, Window: tasksOnly.Name}
+		return Decision{Mode: ModeTasksOnly, Window: tasksOnly.Name, Until: tasksOnly.To}
 	}
 	return Decision{Mode: ModeAllowed}
 }

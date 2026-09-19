@@ -139,6 +139,10 @@ type Result struct {
 	Online   bool
 	Balances client.Balances
 	Screen   client.ScreenState
+	// CreditsPerMinute — курс обмена с сервера. Нужен, чтобы сказать ребёнку
+	// не «120 кредитов», а «это ещё час»: кредиты сами по себе ни о чём
+	// не говорят, а минуты говорят.
+	CreditsPerMinute int
 	// Accepted и Duplicates — это записи очереди, а не минуты: одна запись
 	// может нести несколько минут.
 	Accepted   int
@@ -180,6 +184,8 @@ func (l *Link) Sync(ctx context.Context, r clock.Reading, local config.Policy) (
 		Balances:  res.Balances,
 		Screen:    res.Screen,
 		Corrected: corrected,
+
+		CreditsPerMinute: res.Policy.Economy.CreditsPerMinute,
 	}
 
 	// Кэш пишем по серверному времени: местные часы могли быть переставлены,
