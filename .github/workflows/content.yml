@@ -133,6 +133,14 @@ jobs:
           GOOS=windows GOARCH=amd64 go vet ./...
       - name: Сборка exe
         run: ./build.sh
+
+      # Два настоящих процесса. Юнит-тесты проверяют протокол и учёт по
+      # отдельности; здесь видно то, что видно только на живом запуске —
+      # с какой скоростью списывается время и что снятие помощника счёт
+      # не останавливает.
+      - name: Служба и помощник вместе
+        run: ./two-process-test.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: mykids-agent-windows-x64
