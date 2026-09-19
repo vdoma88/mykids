@@ -66,6 +66,30 @@ async function assertPortFree(port) {
   }
 }
 
+/**
+ * Ждёт, пока на экране появится ожидаемый баланс.
+ *
+ * Сообщение об успехе и новое число приходят разными кадрами: сообщение
+ * рисуется сразу, а баланс — после ответа сервера. Проверять сразу после
+ * сообщения значит иногда читать ещё старое число: на медленной машине это
+ * ровно то, что и случилось.
+ *
+ * Ожидание не прячет поломку: если баланс так и не станет верным, проверка
+ * упадёт по таймауту и скажет, что именно на экране.
+ */
+async function expectBalance(page, testid, want) {
+  try {
+    await page.waitForFunction(
+      ([id, value]) => document.querySelector(`[data-testid="${id}"]`)?.textContent === value,
+      [testid, want],
+      { timeout: 10000 },
+    );
+  } catch {
+    const got = await page.getByTestId(testid).textContent();
+    assert.fail(`${testid}: на экране ${got}, ожидалось ${want}`);
+  }
+}
+
 async function waitFor(url, tries = 80) {
   for (let i = 0; i < tries; i++) {
     try { if ((await fetch(url)).ok) return; } catch { /* ещё не поднялся */ }
@@ -168,7 +192,7 @@ async function main() {
     await page.getByRole('button', { name: 'Подключить' }).click();
     await page.waitForSelector('text=Привет, Марк');
 
-    assert.equal(await page.getByTestId('child-credits').textContent(), '100');
+    await expectBalance(page, 'child-credits', '100');
     // Правила показываются ребёнку намеренно
     await page.waitForSelector('text=Курс обмена');
 
@@ -176,22 +200,22 @@ async function main() {
     await page.fill('#conv', '10');
     await page.getByRole('button', { name: 'Обменять' }).click();
     await page.waitForSelector('text=Получено 10 минут');
-    assert.equal(await page.getByTestId('child-credits').textContent(), '80');
-    assert.equal(await page.getByTestId('child-minutes').textContent(), '10');
+    await expectBalance(page, 'child-credits', '80');
+    await expectBalance(page, 'child-minutes', '10');
 
     // --- покупка в магазине
     await page.getByRole('button', { name: 'Купить' }).click();
     await page.waitForSelector('text=Куплено');
-    assert.equal(await page.getByTestId('child-credits').textContent(), '20');
-    assert.equal(await page.getByTestId('child-minutes').textContent(), '40');
+    await expectBalance(page, 'child-credits', '20');
+    await expectBalance(page, 'child-minutes', '40');
 
     // --- обмен сверх остатка урезается до доступного, а не отклоняется:
     // так задумано в домене, и интерфейс обязан сказать правду о выданном
     await page.fill('#conv', '100');
     await page.getByRole('button', { name: 'Обменять' }).click();
     await page.waitForSelector('text=вместо 100');
-    assert.equal(await page.getByTestId('child-credits').textContent(), '0');
-    assert.equal(await page.getByTestId('child-minutes').textContent(), '50');
+    await expectBalance(page, 'child-credits', '0');
+    await expectBalance(page, 'child-minutes', '50');
 
     // --- а когда кредитов нет совсем, сервер отказывает
     await page.fill('#conv', '5');
