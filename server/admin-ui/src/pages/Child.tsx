@@ -123,6 +123,7 @@ const TAMPER_KINDS: Record<string, string> = {
   clock: 'переведены системные часы',
   unclean_stop: 'агент остановлен нештатно',
   permissions: 'отозваны разрешения агента',
+  helper_lied: 'наблюдатель на компьютере сообщает неправду',
 };
 
 /**

@@ -100,6 +100,15 @@ type harness struct {
 // newHarness собирает ядро без сервера: клиент не настроен, значит работа идёт
 // автономно — ровно как у агента, который сервера ещё не видел.
 func newHarness(t *testing.T, st state.State) *harness {
+	return newHarnessWith(t, st, nil, policy())
+}
+
+// newHarnessWith собирает стенд с заданным рабочим столом и политикой.
+//
+// Рабочий стол задаётся снаружи, потому что под службой он не win32, а тот,
+// который наполняет помощник: проверять связку на фальшивом столе значило бы
+// проверять не ту связку.
+func newHarnessWith(t *testing.T, st state.State, desktop agent.Desktop, pol config.Policy) *harness {
 	t.Helper()
 	dir := t.TempDir()
 
@@ -113,7 +122,10 @@ func newHarness(t *testing.T, st state.State) *harness {
 	lnk.SetTampers(st.PendingTampers)
 
 	d := &desk{proc: "game.exe"}
-	a, err := agent.New(policy(), d, nil, st)
+	if desktop == nil {
+		desktop = d
+	}
+	a, err := agent.New(pol, desktop, nil, st)
 	if err != nil {
 		t.Fatalf("agent: %v", err)
 	}
@@ -122,7 +134,7 @@ func newHarness(t *testing.T, st state.State) *harness {
 	h := &harness{desk: d, clk: fc, link: lnk, statePath: filepath.Join(dir, "state.json")}
 	h.core = New(Options{
 		Agent: a, Link: lnk, Clock: clk, Source: fc.read,
-		StatePath: h.statePath, LocalPolicy: policy(),
+		StatePath: h.statePath, LocalPolicy: pol,
 		Log: func(format string, args ...any) {
 			h.mu.Lock()
 			defer h.mu.Unlock()
