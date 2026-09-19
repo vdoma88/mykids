@@ -21,6 +21,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
+	"github.com/vdoma88/mykids/agents/windows/internal/watchdog"
 )
 
 // Intervals — как часто что делать.
@@ -33,11 +34,17 @@ type Intervals struct {
 	// Save — запись состояния. Между сохранениями теряется не больше этого
 	// времени, и по нему же следующий запуск считает пропуск.
 	Save time.Duration
+	// Watch — проверка, жив ли помощник. Чаще опроса нет смысла: раньше
+	// следующего замера его отсутствие всё равно ни на что не влияет.
+	Watch time.Duration
 }
 
 // DefaultIntervals — значения для боя.
 func DefaultIntervals() Intervals {
-	return Intervals{Tick: 5 * time.Second, Sync: time.Minute, Save: 30 * time.Second}
+	return Intervals{
+		Tick: 5 * time.Second, Sync: time.Minute,
+		Save: 30 * time.Second, Watch: 5 * time.Second,
+	}
 }
 
 // Options — из чего собирается ядро.
@@ -70,7 +77,13 @@ type Core struct {
 	// Обновляется при обмене с сервером; без связи остаются прошлые значения,
 	// и это лучше пустоты — вчерашний остаток кредитов всё ещё ориентир.
 	ctx screen.Context
+	// watch — сторож помощника. Пусто, если службе некого поднимать
+	// (одиночные режимы и тесты).
+	watch *watchdog.Watchdog
 }
+
+// SetHelpers задаёт, кем поднимать помощника.
+func (c *Core) SetHelpers(d watchdog.Desktop) { c.watch = watchdog.New(d) }
 
 // Context — что служба знает про остатки ребёнка прямо сейчас.
 func (c *Core) Context() screen.Context {
@@ -218,6 +231,31 @@ func (c *Core) recover() agent.Recovery {
 	return r
 }
 
+// Watch поднимает помощника, если его нет, и сообщает родителю, если его
+// снимают раз за разом.
+//
+// Без помощника служба слепа: окон не видит, оверлей рисовать некому. Ждать,
+// пока помощника запустит кто-то другой, не приходится — запускать его,
+// кроме службы, некому.
+func (c *Core) Watch(now time.Time) {
+	if c.watch == nil {
+		return
+	}
+	a := c.watch.Check(now)
+	switch {
+	case a.Err != nil:
+		c.opt.Log("помощник не запустился: %v", a.Err)
+	case a.Started:
+		c.opt.Log("помощник запущен в сессии пользователя")
+	}
+	if a.Tamper {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.opt.Log("внимание: %s", a.Detail)
+		c.opt.Link.QueueTamper("helper_killed", a.Detail, c.opt.Clock.Now(c.opt.Source()))
+	}
+}
+
 // ReportLie сообщает родителю, что помощника поймали на лжи, и закрывает
 // экран до следующего решения.
 //
@@ -269,6 +307,19 @@ func (c *Core) Run(ctx context.Context, iv Intervals) error {
 	defer sync.Stop()
 	save := time.NewTicker(iv.Save)
 	defer save.Stop()
+	// Нулевой период означает «не сторожить»: так собраны одиночные режимы
+	// и тесты, и падать на этом циклу незачем. Чтение из нулевого канала
+	// просто никогда не сработает.
+	var watch <-chan time.Time
+	if iv.Watch > 0 {
+		t := time.NewTicker(iv.Watch)
+		defer t.Stop()
+		watch = t.C
+		// Помощника поднимаем сразу, не дожидаясь первого срабатывания:
+		// иначе после перезагрузки экран ребёнка несколько секунд живёт
+		// сам по себе.
+		c.Watch(time.Now())
+	}
 
 	for {
 		select {
@@ -283,6 +334,8 @@ func (c *Core) Run(ctx context.Context, iv Intervals) error {
 			c.Sync(ctx)
 		case <-save.C:
 			c.Save(false)
+		case <-watch:
+			c.Watch(time.Now())
 		}
 	}
 }

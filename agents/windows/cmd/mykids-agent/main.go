@@ -122,15 +122,11 @@ func printUsage() {
 	flag.PrintDefaults()
 }
 
-func defaultDataDir() string {
-	if dir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(dir, "MyKids")
-	}
-	return "."
-}
-
 // paths — где лежат файлы агента.
 type paths struct {
+	// dataDir — каталог со всем перечисленным ниже. Нужен службе целиком:
+	// помощника она запускает с тем же -data, что и у себя.
+	dataDir    string
 	policy     string
 	state      string
 	enrollment string
@@ -140,6 +136,7 @@ type paths struct {
 
 func pathsIn(dataDir string) paths {
 	return paths{
+		dataDir:    dataDir,
 		policy:     filepath.Join(dataDir, "policy.json"),
 		state:      filepath.Join(dataDir, "state.json"),
 		enrollment: filepath.Join(dataDir, "enrollment.json"),

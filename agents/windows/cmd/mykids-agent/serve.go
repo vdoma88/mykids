@@ -30,6 +30,14 @@ func serve(a assembled, o options) error {
 		})
 		core.SetChildURL(a.childURL)
 
+		// Помощника поднимает служба: больше некому. Он живёт в сессии
+		// ребёнка, а служба — в нулевой, и без него служба слепа.
+		if exe, err := os.Executable(); err != nil {
+			log("не найти собственный путь, помощник не будет подниматься: %v", err)
+		} else {
+			core.SetHelpers(newHelpers(exe, helperArgs(a.paths.dataDir, o)))
+		}
+
 		l, err := ipc.Listen(o.pipe)
 		if err != nil {
 			return fmt.Errorf("канал %s: %w", o.pipe, err)
@@ -61,6 +69,19 @@ func serve(a assembled, o options) error {
 	})
 	fmt.Println("остановлена, состояние сохранено")
 	return err
+}
+
+// helperArgs — с какими флагами служба запускает помощника.
+//
+// Те же каталог и канал, что у неё самой: помощник, запущенный с чужими
+// настройками, подключится не туда и будет молчать — а молчание помощника
+// служба считает расходом.
+func helperArgs(dataDir string, o options) []string {
+	args := []string{"-data", dataDir, "-pipe", o.pipe}
+	if o.interval > 0 {
+		args = append(args, "-interval", o.interval.String())
+	}
+	return append(args, "helper")
 }
 
 // acceptHelpers принимает помощников, пока служба жива.
