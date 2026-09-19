@@ -16,6 +16,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/agent"
 	"github.com/vdoma88/mykids/agents/windows/internal/clock"
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
+	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
 	"github.com/vdoma88/mykids/agents/windows/internal/link"
 	"github.com/vdoma88/mykids/agents/windows/internal/state"
 	"github.com/vdoma88/mykids/agents/windows/internal/usage"
@@ -188,6 +189,18 @@ func (c *Core) recover() agent.Recovery {
 	return r
 }
 
+// ReportLie сообщает родителю, что помощника поймали на лжи, и закрывает
+// экран до следующего решения.
+//
+// Отдельным событием, а не строкой в журнале: без службы, которая расскажет,
+// родитель никогда не узнает, что наблюдение подменили.
+func (c *Core) ReportLie(detail string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.opt.Log("внимание: %s", detail)
+	c.opt.Link.QueueTamper("helper_lied", detail, c.opt.Clock.Now(c.opt.Source()))
+}
+
 // UncleanDetail — что увидит родитель. Списанные минуты названы прямо: отличить
 // сбой питания от снятия агента нельзя, и родителю может понадобиться вернуть
 // время ручной корректировкой ровно на эту величину.
@@ -243,4 +256,53 @@ func (c *Core) Run(ctx context.Context, iv Intervals) error {
 			c.Save(false)
 		}
 	}
+}
+
+// Observer — куда складывать наблюдения помощника. Реализует ipc.Desktop.
+type Observer interface {
+	Update(ipc.Sample)
+}
+
+// Handler делает обработчик наблюдений для одного соединения с помощником.
+//
+// Здесь собрано всё, что служба делает с тем, что ей сообщили: ловит на лжи,
+// правит недостоверное, кладёт в учёт и возвращает решение. Вынесено из
+// команды, потому что это логика, а не проводка, и её нужно проверять.
+//
+// Своя проверка на каждое соединение: перезапущенный помощник начинает с
+// чистой репутацией, а подменённый не наследует чужую.
+func (c *Core) Handler(remote Observer, idleThreshold time.Duration, now func() time.Time) func(ipc.Sample) ipc.Verdict {
+	if now == nil {
+		now = time.Now
+	}
+	var scrutiny Scrutiny
+
+	return func(s ipc.Sample) ipc.Verdict {
+		at := now()
+		if f := scrutiny.Observe(s, idleThreshold, at); f.Lying {
+			c.ReportLie(f.Detail)
+		}
+		remote.Update(scrutiny.Correct(s, at))
+		// Тик здесь, а не только по таймеру: иначе помощник несколько секунд
+		// показывал бы уже отменённое решение.
+		return Verdict(c.Tick())
+	}
+}
+
+// Verdict переводит решение учёта в то, что уходит помощнику.
+//
+// Текст готовит служба: помощнику незачем знать правила, а подменённому
+// помощнику незачем давать сочинять надпись ребёнку.
+func Verdict(v usage.Verdict) ipc.Verdict {
+	out := ipc.Verdict{
+		Allow:    v.Allow,
+		Reason:   v.Reason,
+		Window:   v.Window,
+		LeftSecs: v.LeftSecs,
+		WarnSoon: v.WarnSoon,
+	}
+	if !v.Allow {
+		out.Message = agent.BlockMessage(v)
+	}
+	return out
 }

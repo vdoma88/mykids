@@ -10,11 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vdoma88/mykids/agents/windows/internal/agent"
 	"github.com/vdoma88/mykids/agents/windows/internal/helper"
 	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
 	"github.com/vdoma88/mykids/agents/windows/internal/service"
-	"github.com/vdoma88/mykids/agents/windows/internal/usage"
 	"github.com/vdoma88/mykids/agents/windows/internal/winsvc"
 )
 
@@ -37,7 +35,7 @@ func serve(a assembled, o options) error {
 		defer l.Close()
 		log("служба слушает %s", o.pipe)
 
-		go acceptHelpers(l, core, a.remote, log)
+		go acceptHelpers(l, core, a.remote, a.agent.Policy.IdleThresholdSeconds, log)
 
 		iv := service.DefaultIntervals()
 		if o.interval > 0 {
@@ -67,7 +65,10 @@ func serve(a assembled, o options) error {
 //
 // Каждое соединение обслуживается отдельно: помощник может перезапуститься,
 // а пользовательских сессий бывает несколько.
-func acceptHelpers(l net.Listener, core *service.Core, remote *ipc.Desktop, log func(string, ...any)) {
+func acceptHelpers(l net.Listener, core *service.Core, remote *ipc.Desktop,
+	idleThresholdSeconds int, log func(string, ...any)) {
+
+	idleThreshold := time.Duration(idleThresholdSeconds) * time.Second
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -77,13 +78,7 @@ func acceptHelpers(l net.Listener, core *service.Core, remote *ipc.Desktop, log 
 			return // слушатель закрыт — служба выключается
 		}
 		go func() {
-			err := ipc.Serve(conn, func(s ipc.Sample) ipc.Verdict {
-				// Наблюдение — в учёт, решение — обратно помощнику. Тик здесь,
-				// а не только по таймеру: иначе помощник несколько секунд
-				// показывал бы уже отменённое решение.
-				remote.Update(s)
-				return toVerdict(core.Tick())
-			})
+			err := ipc.Serve(conn, core.Handler(remote, idleThreshold, time.Now))
 			if err != nil && !errors.Is(err, ipc.ErrClosed) {
 				// Мусор в канале — либо сломанный помощник, либо подменённый.
 				log("соединение с помощником разорвано: %v", err)
@@ -182,22 +177,4 @@ func runHelper(o options) error {
 			apply(helper.OnVerdict(v))
 		}
 	}
-}
-
-// toVerdict переводит решение учёта в то, что уходит помощнику.
-//
-// Текст готовит служба: помощнику незачем знать правила, а подменённому
-// помощнику незачем давать сочинять надпись ребёнку.
-func toVerdict(v usage.Verdict) ipc.Verdict {
-	out := ipc.Verdict{
-		Allow:    v.Allow,
-		Reason:   v.Reason,
-		Window:   v.Window,
-		LeftSecs: v.LeftSecs,
-		WarnSoon: v.WarnSoon,
-	}
-	if !v.Allow {
-		out.Message = agent.BlockMessage(v)
-	}
-	return out
 }
