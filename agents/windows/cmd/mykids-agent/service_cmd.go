@@ -10,15 +10,21 @@ import (
 //
 // Все эти действия требуют прав администратора: ребёнок не должен уметь ни
 // поставить службу, ни снять её.
-func serviceCommand(sub string) error {
+func serviceCommand(sub string, o options) error {
 	switch sub {
 	case "install":
-		if err := winsvc.Install(); err != nil {
+		// Каталог данных записываем в командную строку службы. Без этого
+		// служба взяла бы свой по умолчанию, и установка с другим -data
+		// привела бы к тому, что привязка лежит в одном месте, а служба
+		// ищет её в другом — и молча работает автономно.
+		if err := winsvc.Install("-data", o.dataDir, "-pipe", o.pipe, "serve"); err != nil {
 			return err
 		}
 		fmt.Printf("служба %q установлена, автозапуск включён\n", winsvc.Name)
+		fmt.Printf("каталог данных: %s\n", o.dataDir)
 		fmt.Println("запустить: mykids-agent service start")
-		fmt.Println("не забудьте поставить помощника в автозапуск пользователя: mykids-agent helper")
+		// Помощника служба поднимает сама: он живёт в сессии ребёнка, а
+		// автозапуск в его профиле ребёнок же и отключил бы.
 		return nil
 
 	case "uninstall":

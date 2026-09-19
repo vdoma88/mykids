@@ -114,6 +114,73 @@ jobs:
         env:
           DATABASE_URL_E2E: postgresql://postgres:postgres@localhost:5432/mykids_test
 
+  image:
+    name: Образ сервера
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mykids_image
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Образ — это то единственное, что семья запускает у себя. Собирать его
+      # только у себя на машине значит узнавать о поломке от того, кто пришёл
+      # ставить MyKids дома.
+      - name: Сборка образа
+        run: docker build -f deploy/api.Dockerfile -t mykids-server .
+
+      - name: Запуск
+        run: |
+          docker run -d --name mykids --network host \
+            -e DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/mykids_image \
+            -e SESSION_SECRET=проверка-образа \
+            -e PORT=3000 mykids-server
+          for _ in $(seq 1 60); do
+            curl -fsS --max-time 2 http://127.0.0.1:3000/health >/dev/null && exit 0
+            sleep 2
+          done
+          echo "сервер в образе не поднялся:" >&2
+          docker logs mykids >&2
+          exit 1
+
+      # Образ, который отвечает на /health, но не отдаёт страницу, выглядит
+      # рабочим ровно до того момента, когда родитель открывает адрес.
+      - name: Интерфейс отдаётся
+        run: |
+          page=$(curl -fsS -H 'Accept: text/html' http://127.0.0.1:3000/)
+          echo "$page" | grep -qi '<div id="root"' || {
+            echo "по корневому адресу пришла не страница админки:" >&2
+            echo "$page" | head -c 400 >&2; docker logs mykids >&2; exit 1; }
+
+          asset=$(echo "$page" | grep -o '/assets/[^"]*\.js' | head -1)
+          [ -n "$asset" ] || { echo "в странице нет ссылки на сборку" >&2; exit 1; }
+          curl -fsS -o /dev/null "http://127.0.0.1:3000$asset" || {
+            echo "файл сборки $asset не отдаётся" >&2; exit 1; }
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' \
+                 http://127.0.0.1:3000/agent/sync)
+          [ "$code" = 401 ] || { echo "/agent/sync ответил $code вместо 401" >&2; exit 1; }
+
+          # Пакеты заданий в образе: без них ребёнку нечем зарабатывать,
+          # и вся экономика держится на ручных начислениях родителя.
+          packs=$(curl -fsS http://127.0.0.1:3000/content/packs/index.json) || {
+            echo "в образе нет пакетов заданий" >&2; exit 1; }
+          echo "$packs" | grep -q '"id"' || {
+            echo "каталог пакетов пуст: $packs" >&2; exit 1; }
+          echo "образ отдаёт страницы, API и задания"
+
+      - name: Логи при падении
+        if: failure()
+        run: docker logs mykids || true
+
   agent:
     name: Windows-агент
     runs-on: ubuntu-latest

@@ -18,6 +18,10 @@ target/
 .env
 .env.local
 *.env.*
+# Кроме примеров: без них первый же шаг инструкции ссылается на файл,
+# которого в репозитории нет.
+!.env.example
+!*.env.example
 
 # Logs and temp files
 *.log

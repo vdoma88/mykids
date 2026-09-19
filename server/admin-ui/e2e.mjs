@@ -4,57 +4,25 @@
  *   npm run build -w @mykids/admin-ui
  *   node server/admin-ui/e2e.mjs
  *
- * Поднимает API и статику собранной админки, затем проходит путь родителя
- * целиком: регистрация, ребёнок, политика, устройство, корректировка — и путь
- * ребёнка: баланс, правила, обмен. Проверяет то, что не видно из юнит-тестов:
- * что фронт и API действительно договариваются.
+ * Поднимает настоящий сервер — тот самый, что уходит в релиз, — и проходит
+ * путь родителя целиком: регистрация, ребёнок, политика, устройство,
+ * корректировка, — и путь ребёнка: баланс, правила, обмен. Проверяет то,
+ * что не видно из юнит-тестов: что фронт и API действительно договариваются.
+ *
+ * Раньше здесь стоял самодельный сервер статики с проксированием API, и он
+ * повторял разбор путей своими руками. Тест против собственной копии сервера
+ * проверяет копию: разойтись они могут молча, и разойдётся та, которую реже
+ * смотрят. Теперь страницы отдаёт сам API, и проверять надо его.
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
-import { createReadStream, existsSync, statSync } from 'node:fs';
-import { createServer, request as httpRequest } from 'node:http';
-import { extname, join, normalize } from 'node:path';
 import assert from 'node:assert/strict';
 
 const API_PORT = 3199;
-const UI_PORT = 5199;
 const DIST = new URL('./dist/', import.meta.url).pathname;
 const API_DIR = new URL('../api/', import.meta.url).pathname;
 const DB = process.env.DATABASE_URL_E2E
   ?? 'postgresql://postgres@127.0.0.1:5433/mykids_e2e';
-
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-                '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8' };
-
-/** Статика админки с проксированием API: так же, как за обратным прокси в бою. */
-function startUi() {
-  return createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    const path = decodeURIComponent(url.pathname);
-
-    if (/^\/(auth|admin|agent|health)(\/|$)/.test(path)
-        || (path.startsWith('/child/') && req.method !== 'GET')
-        || ['/child/me', '/child/store', '/child/packs'].includes(path)) {
-      const upstream = httpRequest(
-        { host: '127.0.0.1', port: API_PORT, path: req.url, method: req.method, headers: req.headers },
-        (up) => { res.writeHead(up.statusCode ?? 502, up.headers); up.pipe(res); },
-      );
-      upstream.on('error', () => { res.writeHead(502).end('нет API'); });
-      req.pipe(upstream);
-      return;
-    }
-
-    const file = normalize(join(DIST, path));
-    if (file.startsWith(DIST) && existsSync(file) && statSync(file).isFile()) {
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-      createReadStream(file).pipe(res);
-      return;
-    }
-    // SPA: любой неизвестный путь отдаёт index.html
-    res.writeHead(200, { 'content-type': TYPES['.html'] });
-    createReadStream(join(DIST, 'index.html')).pipe(res);
-  }).listen(UI_PORT);
-}
 
 /** Чужой процесс на нашем порту сделал бы результат теста бессмысленным. */
 async function assertPortFree(port) {
@@ -90,6 +58,37 @@ async function expectBalance(page, testid, want) {
   }
 }
 
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Отвечает на задание правильно.
+ *
+ * Варианты рендерер перемешивает, поэтому ищем по тексту, а не по номеру:
+ * тест, завязанный на порядок, начал бы врать ровно тогда, когда порядок
+ * поменяют.
+ */
+async function answerItem(page, item) {
+  const host = page.locator('[data-testid="task-host"]');
+  switch (item.type) {
+    case 'numeric':
+      await host.locator('input').first().fill(String(item.answer.value));
+      break;
+    case 'single_choice':
+      await host.locator('label.opt', { hasText: item.options[item.answerIndex].text })
+        .locator('input').check();
+      break;
+    case 'short_text':
+      await host.locator('input, textarea').first().fill(item.answer.accepted[0]);
+      break;
+    default:
+      throw new Error(`тест не умеет отвечать на задание типа ${item.type}`);
+  }
+}
+
 async function waitFor(url, tries = 80) {
   for (let i = 0; i < tries; i++) {
     try { if ((await fetch(url)).ok) return; } catch { /* ещё не поднялся */ }
@@ -104,13 +103,16 @@ async function main() {
   // в устаревший процесс и проверяет не тот код.
   const api = spawn('npx', ['tsx', 'src/main.ts'], {
     cwd: API_DIR, stdio: 'ignore', detached: true,
-    env: { ...process.env, DATABASE_URL: DB, PORT: String(API_PORT) },
+    env: {
+      ...process.env, DATABASE_URL: DB, PORT: String(API_PORT),
+      // Страницы отдаёт сам сервер: проверяем то, что уходит в релиз.
+      MYKIDS_WEB_ROOT: DIST,
+    },
   });
   const stopApi = () => {
     try { process.kill(-api.pid, 'SIGTERM'); } catch { /* уже мёртв */ }
   };
   process.on('exit', stopApi);
-  const ui = startUi();
   let browser;
   let page;
   const errors = [];
@@ -118,7 +120,6 @@ async function main() {
   try {
     await assertPortFree(API_PORT);
     await waitFor(`http://127.0.0.1:${API_PORT}/health`);
-    await waitFor(`http://127.0.0.1:${UI_PORT}/`);
 
     browser = await chromium.launch({
       executablePath: process.env.CHROMIUM_PATH || undefined,
@@ -134,7 +135,7 @@ async function main() {
       }
     });
 
-    const base = `http://127.0.0.1:${UI_PORT}`;
+    const base = `http://127.0.0.1:${API_PORT}`;
     const email = `p${Date.now()}@example.com`;
 
     // --- родитель: регистрация
@@ -179,6 +180,13 @@ async function main() {
     const token = (await page.getByTestId('device-token').textContent()).trim();
     assert.ok(token.length > 20, 'токен устройства не выдан');
 
+    // --- пакеты заданий: без них ребёнку нечем зарабатывать кредиты,
+    // и весь остальной экран у него бессмыслен
+    const pack = 'ru.mykids.physics.mechanics.basic';
+    await page.check(`[data-testid="pack-${pack}"]`);
+    await page.getByTestId('save-packs').click();
+    await page.waitForSelector('[data-testid="packs-saved"]');
+
     // --- магазин
     await page.click('a:has-text("Магазин")');
     await page.fill('#st-title', '+30 минут');
@@ -222,6 +230,33 @@ async function main() {
     await page.getByRole('button', { name: 'Обменять' }).click();
     await page.waitForSelector('.err');
 
+    // --- задания: ради них всё и затевалось. Ребёнок с нулём кредитов
+    // должен иметь возможность их заработать, не прося у родителя.
+    await page.waitForSelector(`[data-testid="pack-${pack}"]`);
+    await page.getByRole('button', { name: 'Решать' }).click();
+    await page.waitForSelector('[data-testid="task-host"] .stem');
+
+    // Отвечаем правильно, подсмотрев ответ в том же файле, который отдаёт
+    // сервер. Проверять надо именно начисление: круг «решил — получил
+    // кредиты — обменял на время» и есть вся суть системы, и до сих пор он
+    // был разорван, потому что решать было негде.
+    const stem = await page.locator('[data-testid="task-host"] .stem').textContent();
+    const items = await fetchJson(`${base}/content/packs/${pack}/pack.json`);
+    let answered = false;
+    for (const rel of items.items) {
+      const item = await fetchJson(`${base}/content/packs/${pack}/${rel}`);
+      if (item.stem !== stem) continue;
+      await answerItem(page, item);
+      answered = true;
+      break;
+    }
+    assert.ok(answered, `задание «${stem}» не нашлось в пакете`);
+
+    await page.getByTestId('task-submit').click();
+    await page.waitForSelector('[data-testid="task-note"]');
+    const note = await page.getByTestId('task-note').textContent();
+    assert.match(note, /Верно\. \+\d+ кредит/, `за верный ответ не начислено: ${note}`);
+
     assert.deepEqual(errors, [], 'в консоли есть ошибки приложения');
     console.log('admin-ui e2e: все проверки пройдены');
   } catch (err) {
@@ -237,7 +272,6 @@ async function main() {
     throw err;
   } finally {
     await browser?.close();
-    ui.close();
     stopApi();
   }
 }

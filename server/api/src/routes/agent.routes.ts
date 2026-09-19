@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { Services } from '../app.js';
+import { underPrefix, type Services } from '../app.js';
 
 /**
  * То, что нужно агенту на устройстве ребёнка.
@@ -11,7 +11,7 @@ import type { Services } from '../app.js';
  */
 export function registerAgentRoutes(app: FastifyInstance, s: Services): void {
   app.addHook('onRequest', async (req) => {
-    if (req.url.startsWith('/agent')) await app.requireDevice(req);
+    if (underPrefix(req.url, '/agent')) await app.requireDevice(req);
   });
 
   /** Политика и текущее состояние. Агент кэширует их и решает офлайн. */

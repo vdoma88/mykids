@@ -195,6 +195,73 @@ function TamperLog({ childId, query, readOnly }: {
   );
 }
 
+/**
+ * Пакеты заданий ребёнка.
+ *
+ * Без этого весь остальной экран бессмыслен: ребёнок видит баланс и курс
+ * обмена, но заработать ему нечем — назначить пакеты было негде.
+ */
+function PacksCard({ childId, readOnly }: { childId: string; readOnly: boolean }): JSX.Element {
+  const packsQ = useAsync(() => api.packs(childId), [childId]);
+  const [chosen, setChosen] = useState<Set<string> | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const assigned = chosen ?? new Set(packsQ.data?.assigned ?? []);
+
+  function toggle(id: string): void {
+    const next = new Set(assigned);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setChosen(next);
+    setMsg(null);
+  }
+
+  async function save(): Promise<void> {
+    setErr(null);
+    setMsg(null);
+    try {
+      const res = await api.savePacks(childId, [...assigned]);
+      setMsg(res.assigned.length === 0
+        ? 'Пакеты сняты: зарабатывать кредиты ребёнку пока нечем.'
+        : `Назначено пакетов: ${res.assigned.length}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>Задания</h3>
+      <ErrorBox message={packsQ.error ?? err} />
+      {packsQ.loading && <Loading />}
+      {packsQ.data?.catalog.length === 0 && (
+        <p className="note">Каталог пуст: сервер не видит пакетов заданий.</p>
+      )}
+      {packsQ.data?.catalog.map((p) => (
+        <label className="row" key={p.id} style={{ alignItems: 'flex-start', gap: 8 }}>
+          <input
+            type="checkbox"
+            data-testid={`pack-${p.id}`}
+            disabled={readOnly}
+            checked={assigned.has(p.id)}
+            onChange={() => toggle(p.id)}
+          />
+          <span>
+            <b>{p.title}</b> <span className="note">({p.itemCount} заданий)</span>
+            {p.description && <div className="note">{p.description}</div>}
+          </span>
+        </label>
+      ))}
+      {!readOnly && packsQ.data && packsQ.data.catalog.length > 0 && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <button onClick={() => void save()} data-testid="save-packs">Сохранить пакеты</button>
+          {msg && <span className="ok" data-testid="packs-saved">{msg}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChildPage({ me }: { me: Me }): JSX.Element {
   const { childId = '' } = useParams();
   const readOnly = me.role === 'viewer';
@@ -427,6 +494,8 @@ export function ChildPage({ me }: { me: Me }): JSX.Element {
           )}
         </div>
       )}
+
+      <PacksCard childId={childId} readOnly={readOnly} />
 
       <TamperLog childId={childId} query={tamperQ} readOnly={readOnly} />
 

@@ -7,6 +7,7 @@ export default defineConfig({
     alias: {
       '@mykids/contracts': new URL('../../packages/contracts/src/index.ts', import.meta.url).pathname,
       '@mykids/domain': new URL('../../packages/domain/src/index.ts', import.meta.url).pathname,
+      '@mykids/task-runner': new URL('../../packages/task-runner/src/index.ts', import.meta.url).pathname,
     },
   },
   server: {

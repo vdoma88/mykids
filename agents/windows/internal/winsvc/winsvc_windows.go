@@ -110,7 +110,7 @@ func Run(body Body) error {
 }
 
 // Install регистрирует службу с автозапуском.
-func Install() error {
+func Install(args ...string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("путь к себе: %w", err)
@@ -135,7 +135,7 @@ func Install() error {
 		DisplayName: DisplayName,
 		Description: Description,
 		StartType:   mgr.StartAutomatic,
-	}, "serve")
+	}, args...)
 	if err != nil {
 		return fmt.Errorf("создание службы: %w", err)
 	}
