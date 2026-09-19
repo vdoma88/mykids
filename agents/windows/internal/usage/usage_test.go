@@ -230,3 +230,66 @@ func TestChargeGapWithoutGrantChargesNothing(t *testing.T) {
 		t.Fatalf("учёт изменён: %d", day.UsedSeconds)
 	}
 }
+
+func TestFrequentSamplesDoNotLoseTime(t *testing.T) {
+	// Помощник шлёт наблюдения каждую секунду, таймер службы тикает своим
+	// чередом: промежутки выходят по полсекунды. Округление вниз превращало
+	// час экрана в считанные минуты.
+	acc := New(2*time.Minute, nil, time.Minute)
+	day := Day{Key: "2026-09-19", GrantSeconds: 3600}
+	base := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+
+	// Шестьдесят замеров по полсекунды — это ровно тридцать секунд.
+	for i := 0; i <= 60; i++ {
+		acc.Observe(Sample{At: base.Add(time.Duration(i) * 500 * time.Millisecond), Process: "game.exe"},
+			&day, "2026-09-19")
+	}
+	if day.UsedSeconds != 30 {
+		t.Fatalf("за 30 секунд списано %d — остаток теряется", day.UsedSeconds)
+	}
+}
+
+func TestCarryDoesNotAccumulateWhileIdle(t *testing.T) {
+	// Простой не списывается совсем: копить с него остаток значило бы
+	// списывать время, которого не было.
+	acc := New(10*time.Second, nil, time.Minute)
+	day := Day{Key: "2026-09-19", GrantSeconds: 3600}
+	base := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+
+	acc.Observe(Sample{At: base, Process: "game.exe"}, &day, "2026-09-19")
+	for i := 1; i <= 60; i++ {
+		acc.Observe(Sample{
+			At:      base.Add(time.Duration(i) * 500 * time.Millisecond),
+			Process: "game.exe", Idle: time.Minute,
+		}, &day, "2026-09-19")
+	}
+	if day.UsedSeconds != 0 {
+		t.Fatalf("простой списал %d секунд", day.UsedSeconds)
+	}
+
+	// И накопленного остатка после простоя быть не должно.
+	acc.Observe(Sample{At: base.Add(31 * time.Second), Process: "game.exe"}, &day, "2026-09-19")
+	if day.UsedSeconds > 1 {
+		t.Fatalf("после простоя разом списано %d секунд", day.UsedSeconds)
+	}
+}
+
+func TestCarryNeverExceedsOneSecond(t *testing.T) {
+	// Остаток — это хвост, а не копилка: он не должен превращаться в скачок.
+	acc := New(2*time.Minute, nil, time.Minute)
+	day := Day{Key: "2026-09-19", GrantSeconds: 3600}
+	base := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+
+	prev := 0
+	for i := 0; i <= 100; i++ {
+		acc.Observe(Sample{At: base.Add(time.Duration(i) * 100 * time.Millisecond), Process: "game.exe"},
+			&day, "2026-09-19")
+		if day.UsedSeconds-prev > 1 {
+			t.Fatalf("замер %d списал %d секунд разом", i, day.UsedSeconds-prev)
+		}
+		prev = day.UsedSeconds
+	}
+	if day.UsedSeconds != 10 {
+		t.Fatalf("за 10 секунд списано %d", day.UsedSeconds)
+	}
+}

@@ -1,0 +1,246 @@
+// Package service — то, что делает служба: учёт, политика, связь с сервером,
+// состояние на диске.
+//
+// Вынесено из команды отдельно, потому что этот цикл теперь нужен трижды: под
+// службой Windows, в консоли для отладки и в однопроцессном режиме. Три копии
+// разошлись бы, и разошлись бы именно в мелочах, которые тут и важны, —
+// что сохранять при остановке и в каком порядке.
+package service
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/vdoma88/mykids/agents/windows/internal/agent"
+	"github.com/vdoma88/mykids/agents/windows/internal/clock"
+	"github.com/vdoma88/mykids/agents/windows/internal/config"
+	"github.com/vdoma88/mykids/agents/windows/internal/link"
+	"github.com/vdoma88/mykids/agents/windows/internal/state"
+	"github.com/vdoma88/mykids/agents/windows/internal/usage"
+)
+
+// Intervals — как часто что делать.
+type Intervals struct {
+	// Tick — опрос рабочего стола.
+	Tick time.Duration
+	// Sync — обмен с сервером. Реже опроса: расписание меняется редко,
+	// а расход копится в очереди.
+	Sync time.Duration
+	// Save — запись состояния. Между сохранениями теряется не больше этого
+	// времени, и по нему же следующий запуск считает пропуск.
+	Save time.Duration
+}
+
+// DefaultIntervals — значения для боя.
+func DefaultIntervals() Intervals {
+	return Intervals{Tick: 5 * time.Second, Sync: time.Minute, Save: 30 * time.Second}
+}
+
+// Options — из чего собирается ядро.
+type Options struct {
+	Agent  *agent.Agent
+	Link   *link.Link
+	Clock  *clock.Clock
+	Source clock.Source
+	// StatePath — куда писать состояние.
+	StatePath string
+	// LocalPolicy — запасная политика, если сервера не видели ни разу.
+	LocalPolicy config.Policy
+	// Log — куда сообщать. Под службой это журнал Windows, в консоли — stderr.
+	Log func(format string, args ...any)
+}
+
+// Core связывает всё это под одним замком.
+//
+// Замок не формальность: наблюдения приходят из потока соединения с помощником,
+// а тики — из таймера, и оба трогают учёт.
+type Core struct {
+	mu   sync.Mutex
+	opt  Options
+	last usage.Verdict
+	// Подкрутки считаем от значения, с которым запустились: clock.Tampers()
+	// растёт за весь запуск, и прибавлять его при каждом сохранении значило бы
+	// считать одни и те же сдвиги снова и снова.
+	tampersAtStart int
+}
+
+// New собирает ядро.
+func New(o Options) *Core {
+	if o.Log == nil {
+		o.Log = func(string, ...any) {}
+	}
+	if o.Source == nil {
+		o.Source = clock.System()
+	}
+	return &Core{opt: o, tampersAtStart: o.Agent.State().ClockTampers}
+}
+
+// Verdict — последнее решение. Его показывает помощник.
+func (c *Core) Verdict() usage.Verdict {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.last
+}
+
+// Tick — один шаг учёта. Безопасен для вызова из нескольких потоков.
+func (c *Core) Tick() usage.Verdict {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.tick()
+}
+
+func (c *Core) tick() usage.Verdict {
+	r := c.opt.Source()
+	if jump, tampered := c.opt.Link.Observe(r); tampered {
+		c.opt.Log("внимание: %s — учёт продолжается по исправленному времени", jump)
+	}
+
+	now := c.opt.Clock.Now(r)
+	v, err := c.opt.Agent.Tick(now)
+	if err != nil {
+		// Наблюдать не получилось. Решение не обновляем: показывать помощнику
+		// нечего, а прежнее остаётся в силе.
+		c.opt.Log("тик: %v", err)
+		return c.last
+	}
+	if err := c.opt.Link.Record(v.ConsumedSecs, now); err != nil {
+		c.opt.Log("%v", err)
+	}
+	c.last = v
+	return v
+}
+
+// Sync обменивается с сервером и применяет присланную политику.
+func (c *Core) Sync(ctx context.Context) link.Result {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sync(ctx)
+}
+
+func (c *Core) sync(ctx context.Context) link.Result {
+	res, err := c.opt.Link.Sync(ctx, c.opt.Source(), c.opt.LocalPolicy)
+	if err != nil {
+		c.opt.Log("обмен с сервером: %v", err)
+	}
+	changed, setErr := c.opt.Agent.SetPolicy(res.Policy)
+	if setErr != nil {
+		c.opt.Log("политика отклонена: %v", setErr)
+		return res
+	}
+	if changed {
+		c.opt.Log("политика обновлена (%s)", res.Source)
+	}
+	return res
+}
+
+// Save пишет состояние. clean=true означает штатное завершение: следующий
+// запуск не будет считать это пропуском и не станет его оплачивать.
+func (c *Core) Save(clean bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.save(clean)
+}
+
+func (c *Core) save(clean bool) {
+	st := c.opt.Agent.State()
+	st.CleanShutdown = clean
+	// Остаток секунд, очередь сообщений и поправка часов обязаны пережить
+	// перезапуск: иначе достаточно убивать агента, чтобы копить время даром.
+	st.PendingSeconds = c.opt.Link.Pending()
+	st.PendingTampers = c.opt.Link.Tampers()
+	// Метка времени нужна следующему запуску: по ней считается пропуск,
+	// если этот закончится не штатно.
+	st.LastSeenAt = c.opt.Clock.Now(c.opt.Source())
+	st.ClockOffsetSeconds = int(c.opt.Clock.Offset().Seconds())
+	st.ClockTrusted = c.opt.Clock.Trusted()
+	st.ClockTampers = c.tampersAtStart + c.opt.Clock.Tampers()
+
+	if err := state.Save(c.opt.StatePath, st); err != nil {
+		c.opt.Log("не удалось сохранить состояние: %v", err)
+	}
+}
+
+// Recover разбирает последствия нештатной остановки: оплачивает пропуск и
+// ставит сообщение родителю в очередь.
+//
+// Пропуск уходит в ту же очередь расхода, что и обычное время: иначе списание
+// осталось бы только в локальном файле, который ребёнок может удалить.
+func (c *Core) Recover() agent.Recovery {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.recover()
+}
+
+func (c *Core) recover() agent.Recovery {
+	now := c.opt.Clock.Now(c.opt.Source())
+	r := c.opt.Agent.RecoverUnclean(now)
+	if !r.Unclean {
+		return r
+	}
+	if r.ChargedSecs > 0 {
+		if err := c.opt.Link.Record(r.ChargedSecs, now); err != nil {
+			c.opt.Log("%v", err)
+		}
+	}
+	c.opt.Link.QueueTamper("unclean_stop", UncleanDetail(r), now)
+	return r
+}
+
+// UncleanDetail — что увидит родитель. Списанные минуты названы прямо: отличить
+// сбой питания от снятия агента нельзя, и родителю может понадобиться вернуть
+// время ручной корректировкой ровно на эту величину.
+func UncleanDetail(r agent.Recovery) string {
+	if r.ChargedSecs == 0 {
+		return fmt.Sprintf("агент не работал %s, списывать было нечего", r.Gap.Round(time.Minute))
+	}
+	return fmt.Sprintf("агент не работал %s, списано %d мин",
+		r.Gap.Round(time.Minute), r.ChargedSecs/60)
+}
+
+// Run ведёт цикл до отмены контекста.
+//
+// Порядок в начале важен и потому закреплён здесь, а не в вызывающем:
+// сначала политика — от дневной выдачи считается ограничение списания за
+// пропуск, и по локальной политике оно вышло бы не тем, что задал родитель.
+func (c *Core) Run(ctx context.Context, iv Intervals) error {
+	c.mu.Lock()
+	c.sync(ctx)
+	rec := c.recover()
+	if rec.Unclean {
+		c.opt.Log("внимание: %s", UncleanDetail(rec))
+	}
+	// Сохраняемся сразу: убийство агента в первую же минуту не должно стирать
+	// ни списание, ни сообщение родителю.
+	c.save(false)
+	if rec.Unclean {
+		// И сразу отдаём серверу. Ждать минуту до следующего обмена значит
+		// оставить родителя в неведении ровно тогда, когда это важнее всего.
+		c.sync(ctx)
+	}
+	c.mu.Unlock()
+
+	tick := time.NewTicker(iv.Tick)
+	defer tick.Stop()
+	sync := time.NewTicker(iv.Sync)
+	defer sync.Stop()
+	save := time.NewTicker(iv.Save)
+	defer save.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Штатная остановка: пропуск до следующего запуска оплачивать
+			// не за что.
+			c.Save(true)
+			return nil
+		case <-tick.C:
+			c.Tick()
+		case <-sync.C:
+			c.Sync(ctx)
+		case <-save.C:
+			c.Save(false)
+		}
+	}
+}

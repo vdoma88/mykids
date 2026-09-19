@@ -25,6 +25,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/client"
 	"github.com/vdoma88/mykids/agents/windows/internal/clock"
 	"github.com/vdoma88/mykids/agents/windows/internal/config"
+	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
 	"github.com/vdoma88/mykids/agents/windows/internal/link"
 	"github.com/vdoma88/mykids/agents/windows/internal/outbox"
 	"github.com/vdoma88/mykids/agents/windows/internal/policy"
@@ -47,6 +48,7 @@ func main() {
 	interval := flag.Duration("interval", 5*time.Second, "период опроса рабочего стола")
 	server := flag.String("server", "", "адрес сервера семьи (для enroll)")
 	token := flag.String("token", "", "токен устройства (для enroll)")
+	pipe := flag.String("pipe", ipc.DefaultAddr, "канал между службой и помощником")
 	flag.Usage = printUsage
 	flag.Parse()
 
@@ -65,7 +67,11 @@ func main() {
 		}
 	}
 
-	opts := options{dataDir: *dataDir, interval: *interval, server: *server, token: *token}
+	opts := options{
+		dataDir: *dataDir, interval: *interval,
+		server: *server, token: *token, pipe: *pipe,
+		sub: flag.Arg(1),
+	}
 	if err := run(cmd, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
 		os.Exit(1)
@@ -77,6 +83,9 @@ type options struct {
 	interval time.Duration
 	server   string
 	token    string
+	pipe     string
+	// sub — вторая часть команды, например install у service.
+	sub string
 }
 
 func printUsage() {
@@ -88,9 +97,21 @@ func printUsage() {
 Команды:
   status    один замер: активное окно, простой, остаток времени, связь
   watch     наблюдение и учёт без блокировки экрана
-  run       наблюдение с блокировкой экрана
+  run       наблюдение с блокировкой экрана в одном процессе
   enroll    привязать устройство: -server <адрес> -token <токен>
   version   версия
+
+Боевой режим — два процесса:
+  service install    зарегистрировать службу (нужны права администратора)
+  service uninstall  убрать службу
+  service start      запустить
+  service stop       остановить
+  service status     состояние службы
+  serve              тело службы; из консоли — для отладки
+  helper             наблюдатель в сессии пользователя, рисует оверлей
+
+Служба живёт в нулевой сессии и рабочего стола не видит: наблюдает помощник,
+решает служба. Остановить её ребёнок без прав администратора не может.
 
 Флаги:
 `, version)
@@ -140,6 +161,12 @@ func run(cmd string, o options) error {
 	if cmd == "enroll" {
 		return enroll(p.enrollment, o.server, o.token)
 	}
+	if cmd == "service" {
+		return serviceCommand(o.sub)
+	}
+	if cmd == "helper" {
+		return runHelper(o)
+	}
 
 	localPolicy, err := config.Load(p.policy)
 	if err != nil {
@@ -174,12 +201,22 @@ func run(cmd string, o options) error {
 	// который ребёнку доступен на запись.
 	resolved := policy.Resolve(localPolicy, p.cache)
 
+	// Откуда агент узнаёт о рабочем столе, зависит от команды: под службой это
+	// помощник по каналу, в однопроцессных режимах — win32 напрямую.
+	var desktop agent.Desktop = newDesktop()
+	var remote *ipc.Desktop
+	if cmd == "serve" {
+		remote = ipc.NewDesktop(0, time.Now)
+		desktop = remote
+	}
+
+	// Оверлей рисует тот, кто видит рабочий стол. У службы его нет.
 	var enforcer agent.Enforcer
 	if cmd == "run" {
 		enforcer = newEnforcer()
 	}
 
-	a, err := agent.New(resolved.Policy, newDesktop(), enforcer, st)
+	a, err := agent.New(resolved.Policy, desktop, enforcer, st)
 	if err != nil {
 		return err
 	}
@@ -191,10 +228,28 @@ func run(cmd string, o options) error {
 		return status(a, lnk, clk, source, localPolicy, enrollment, p)
 	case "watch", "run":
 		return loop(a, lnk, clk, source, localPolicy, p, o.interval, cmd == "run")
+	case "serve":
+		return serve(assembled{
+			agent: a, link: lnk, clock: clk, source: source,
+			localPolicy: localPolicy, paths: p, remote: remote,
+		}, o)
 	default:
 		printUsage()
 		return fmt.Errorf("неизвестная команда %q", cmd)
 	}
+}
+
+// assembled — собранный агент со всем, что ему нужно. Отдельный тип, чтобы
+// список не разрастался в сигнатурах команд.
+type assembled struct {
+	agent       *agent.Agent
+	link        *link.Link
+	clock       *clock.Clock
+	source      clock.Source
+	localPolicy config.Policy
+	paths       paths
+	// remote — рабочий стол, который наполняет помощник. Только у serve.
+	remote *ipc.Desktop
 }
 
 func enroll(path, server, token string) error {
