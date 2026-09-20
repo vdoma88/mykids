@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/agent"
+	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
 	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 	"github.com/vdoma88/mykids/agents/windows/internal/win32"
 )
@@ -93,4 +94,29 @@ func hideWarning() {
 		bar.Close()
 		bar = nil
 	}
+}
+
+// newLockSource — собственный источник состояния экрана для службы.
+//
+// Спрашиваем про консольную сессию: это та, за которой физически сидят. При
+// переключении пользователей консольной становится чужая сессия, и ответ
+// «открыт» по ней — правильный ответ: за компьютером работают, пусть и не
+// ребёнок. Вопрос о втором пользователе решается не здесь.
+func newLockSource() ipc.LockSource {
+	return ipc.LockFunc(func() ipc.LockState {
+		session := win32.ConsoleSession()
+		if session == 0 {
+			// Никто не вошёл: блокировать нечего и незачем.
+			return ipc.LockUnknown
+		}
+		locked, known := win32.SessionLockedWTS(session)
+		switch {
+		case !known:
+			return ipc.LockUnknown
+		case locked:
+			return ipc.LockOn
+		default:
+			return ipc.LockOff
+		}
+	})
 }

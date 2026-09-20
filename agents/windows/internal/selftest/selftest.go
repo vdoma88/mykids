@@ -49,6 +49,10 @@ type Probe interface {
 	ForegroundProcess() (string, error)
 	IdleTime() (time.Duration, error)
 	SessionLocked() bool
+	// SessionLockWTS — состояние экрана глазами диспетчера сессий: второй
+	// источник, которым служба проверяет помощника. Второе значение — удалось
+	// ли спросить.
+	SessionLockWTS() (locked bool, known bool)
 	ActiveSession() uint32
 	ServiceState() (string, error)
 	// Elevated — запущено ли с правами администратора.
@@ -77,6 +81,7 @@ func Run(p Probe, sleep func(time.Duration)) []Result {
 		foreground(p),
 		idle(p, sleep),
 		locked(p),
+		lockWTS(p),
 		session(p),
 		service(p),
 		rights(p),
@@ -157,6 +162,31 @@ func locked(p Probe) Result {
 		return r
 	}
 	r.Status, r.Detail = Pass, "экран открыт — так и должно быть, вы за ним работаете"
+	return r
+}
+
+func lockWTS(p Probe) Result {
+	r := Result{
+		Name: "Встречная проверка экрана",
+		Why:  "служба спрашивает Windows о блокировке сама; без этого ей остаётся верить помощнику на слово, а помощник работает с правами ребёнка",
+	}
+	locked, known := p.SessionLockWTS()
+	switch {
+	case !known:
+		r.Status = Warn
+		r.Detail = "диспетчер сессий не ответил"
+		r.Hint = "Не страшно: служба вернётся к слову помощника, как было раньше. Но одной защитой от подменённого помощника станет меньше — пришлите отчёт."
+	case locked:
+		// Проверку запускает человек, который прямо сейчас смотрит в экран.
+		// Если Windows при этом говорит «заблокирован», ответ неверен — и
+		// ошибка именно в ту сторону, которая раздаёт время даром.
+		r.Status = Fail
+		r.Detail = "Windows отвечает, что сессия заблокирована, хотя вы работаете за этим компьютером"
+		r.Hint = "С таким ответом время не будет списываться вообще. Пришлите отчёт: службе придётся отключить встречную проверку на этой машине."
+	default:
+		r.Status = Pass
+		r.Detail = "Windows отвечает: сессия открыта — как и есть на самом деле"
+	}
 	return r
 }
 

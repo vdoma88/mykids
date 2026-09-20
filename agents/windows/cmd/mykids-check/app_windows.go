@@ -29,7 +29,16 @@ func (probe) SessionLocked() bool                { return win32.SessionLocked() 
 // Консольная сессия, а не ActiveSession: та спрашивает токен пользователя,
 // на что нужна привилегия службы. Из-под ребёнка она всегда вернула бы ноль,
 // и проверка ругалась бы на исправную машину.
-func (probe) ActiveSession() uint32         { return win32.ConsoleSession() }
+func (probe) ActiveSession() uint32 { return win32.ConsoleSession() }
+
+// SessionLockWTS — тот же вопрос, который служба задаёт о сессии ребёнка.
+// Привилегий он не требует, в отличие от запроса токена, поэтому спросить его
+// можно и из-под ребёнка — а спросить надо именно оттуда: служба будет
+// спрашивать про эту же сессию.
+func (probe) SessionLockWTS() (bool, bool) {
+	return win32.SessionLockedWTS(win32.ConsoleSession())
+}
+
 func (probe) ServiceState() (string, error) { return winsvc.Query() }
 
 func (probe) Elevated() bool {

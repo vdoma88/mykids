@@ -14,6 +14,8 @@ type fake struct {
 	idle     time.Duration
 	idleErr  error
 	locked   bool
+	wtsLock  bool
+	wtsKnown bool
 	session  uint32
 	state    string
 	stateErr error
@@ -21,12 +23,13 @@ type fake struct {
 }
 
 func healthy() *fake {
-	return &fake{proc: "game.exe", idle: 0, session: 2, state: "работает"}
+	return &fake{proc: "game.exe", idle: 0, session: 2, state: "работает", wtsKnown: true}
 }
 
 func (f *fake) ForegroundProcess() (string, error) { return f.proc, f.procErr }
 func (f *fake) IdleTime() (time.Duration, error)   { return f.idle, f.idleErr }
 func (f *fake) SessionLocked() bool                { return f.locked }
+func (f *fake) SessionLockWTS() (bool, bool)       { return f.wtsLock, f.wtsKnown }
 func (f *fake) ActiveSession() uint32              { return f.session }
 func (f *fake) ServiceState() (string, error)      { return f.state, f.stateErr }
 func (f *fake) Elevated() bool                     { return f.elevated }
@@ -205,5 +208,47 @@ func TestHumanReadsAsRussian(t *testing.T) {
 		if got := human(d); got != want {
 			t.Errorf("human(%s) = %q, ожидалось %q", d, got, want)
 		}
+	}
+}
+
+func TestWTSLockDisagreeingWithRealityIsAFailure(t *testing.T) {
+	// Проверку запускает человек, который прямо сейчас смотрит в экран. Ответ
+	// «заблокирован» тут неверен, и неверен в самую дорогую сторону: служба
+	// перестала бы списывать время совсем.
+	f := healthy()
+	f.wtsLock = true
+
+	r := byName(Run(f, f.rest), "Встречная проверка")
+	if r.Status != Fail {
+		t.Fatalf("Windows называет открытый экран заблокированным, а проверка отвечает «%s»", r.Status)
+	}
+	if r.Hint == "" {
+		t.Fatal("родителю не сказали, что с этим делать")
+	}
+}
+
+func TestMissingWTSAnswerIsOnlyAWarning(t *testing.T) {
+	// Встречная проверка — вторая линия, а не единственная. Без неё служба
+	// возвращается к прежнему поведению, и пугать этим красным нельзя.
+	f := healthy()
+	f.wtsKnown = false
+
+	r := byName(Run(f, f.rest), "Встречная проверка")
+	if r.Status != Warn {
+		t.Fatalf("отсутствие второго источника показано как «%s», а это не поломка", r.Status)
+	}
+	if Worst(Run(f, f.rest)) == Fail {
+		t.Fatal("машина без второго источника объявлена неисправной")
+	}
+}
+
+func TestWTSCheckExplainsWhyItMatters(t *testing.T) {
+	f := healthy()
+	r := byName(Run(f, f.rest), "Встречная проверка")
+	if r.Status != Pass {
+		t.Fatalf("исправная машина не прошла встречную проверку: %s", r.Detail)
+	}
+	if !strings.Contains(r.Why, "помощник") {
+		t.Fatalf("не объяснено, от чего эта проверка защищает: %q", r.Why)
 	}
 }

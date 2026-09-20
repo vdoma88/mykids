@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/agent"
+	"github.com/vdoma88/mykids/agents/windows/internal/ipc"
 	"github.com/vdoma88/mykids/agents/windows/internal/screen"
 )
 
@@ -25,7 +26,15 @@ func (stubDesktop) ForegroundProcess() (string, error) {
 }
 
 func (stubDesktop) IdleTime() (time.Duration, error) { return 0, nil }
-func (stubDesktop) SessionLocked() bool              { return false }
+
+// SessionLocked — то, что помощник заявляет о блокировке экрана.
+//
+// Переменная окружения позволяет ему соврать. Это не украшение: заявленная
+// блокировка при неподвижном окне — самая выгодная ложь из возможных, старой
+// проверкой на противоречии она не ловится вовсе, и проверять защиту от неё
+// нужно на двух настоящих процессах. Переменная отдельная от MYKIDS_FAKE_LOCK
+// именно затем, чтобы помощник и служба могли разойтись в показаниях.
+func (stubDesktop) SessionLocked() bool { return os.Getenv("MYKIDS_FAKE_HELPER_LOCK") == "1" }
 
 // printEnforcer печатает то, что настоящий оверлей нарисовал бы поверх экрана.
 //
@@ -73,3 +82,22 @@ func hideWarning() { shownWarning = "" }
 
 func newDesktop() agent.Desktop   { return stubDesktop{} }
 func newEnforcer() agent.Enforcer { return &printEnforcer{} }
+
+// newLockSource — собственный источник состояния экрана.
+//
+// Вне Windows спросить некого, и по умолчанию источника нет вовсе: всё решает
+// помощник, как и до встречной проверки. Переменная окружения задаёт ответ —
+// тем же способом, что и MYKIDS_FAKE_PROCESS, и ровно затем же: чтобы
+// поведение двух процессов вместе проверялось там, где Windows нет.
+func newLockSource() ipc.LockSource {
+	return ipc.LockFunc(func() ipc.LockState {
+		switch os.Getenv("MYKIDS_FAKE_LOCK") {
+		case "on":
+			return ipc.LockOn
+		case "off":
+			return ipc.LockOff
+		default:
+			return ipc.LockUnknown
+		}
+	})
+}

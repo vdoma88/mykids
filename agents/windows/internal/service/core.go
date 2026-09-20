@@ -353,7 +353,11 @@ type Observer interface {
 //
 // Своя проверка на каждое соединение: перезапущенный помощник начинает с
 // чистой репутацией, а подменённый не наследует чужую.
-func (c *Core) Handler(remote Observer, idleThreshold time.Duration, now func() time.Time) func(ipc.Sample) ipc.Verdict {
+//
+// own — собственный источник состояния экрана. Пустой означает, что своего
+// мнения о блокировке у службы нет и всё решает помощник; так работает всё,
+// что не Windows.
+func (c *Core) Handler(remote Observer, own ipc.LockSource, idleThreshold time.Duration, now func() time.Time) func(ipc.Sample) ipc.Verdict {
 	if now == nil {
 		now = time.Now
 	}
@@ -361,7 +365,11 @@ func (c *Core) Handler(remote Observer, idleThreshold time.Duration, now func() 
 
 	return func(s ipc.Sample) ipc.Verdict {
 		at := now()
-		if f := scrutiny.Observe(s, idleThreshold, at); f.Lying {
+		lock := ipc.LockUnknown
+		if own != nil {
+			lock = own.SessionLock()
+		}
+		if f := scrutiny.Observe(s, lock, idleThreshold, at); f.Lying {
 			c.ReportLie(f.Detail)
 		}
 		remote.Update(scrutiny.Correct(s, at))

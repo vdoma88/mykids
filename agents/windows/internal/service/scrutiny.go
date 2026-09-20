@@ -29,6 +29,17 @@ const (
 	// означало бы, что ребёнок больше никогда не сможет отойти от компьютера
 	// без списания.
 	DistrustFor = 10 * time.Minute
+	// LockLieThreshold — сколько расхождений подряд с собственным источником
+	// считать ложью.
+	//
+	// Не одно: ребёнок может разблокировать экран ровно между замером
+	// помощника и вопросом службы, и тогда расхождение честное. Три подряд
+	// гонкой уже не объяснишь.
+	//
+	// Порог нужен только для того, чтобы не дёргать родителя зря. Кражу
+	// времени он не сторожит: заявленная блокировка отменяется сразу,
+	// с первого же расхождения, не дожидаясь никакого счёта.
+	LockLieThreshold = 3
 )
 
 // Scrutiny следит за правдоподобием того, что сообщает помощник.
@@ -41,6 +52,13 @@ type Scrutiny struct {
 	changes int
 	// distrustUntil — до какого момента простою не верим.
 	distrustUntil time.Time
+	// lockOff — сколько раз подряд помощник заявил блокировку, которой
+	// Windows не подтвердила.
+	lockOff int
+	// ownLock — что сказал собственный источник на последнем наблюдении.
+	// Его же применяет Correct: правка относится к тому наблюдению, которое
+	// только что разобрали.
+	ownLock ipc.LockState
 }
 
 // Finding — то, что стоит показать родителю.
@@ -51,9 +69,21 @@ type Finding struct {
 
 // Observe разбирает очередное наблюдение.
 //
+// own — что о блокировке экрана знает сама служба, спросив Windows.
+// ipc.LockUnknown означает «спросить не удалось»: тогда всё как раньше, на
+// слово помощнику.
+//
 // idleThreshold берётся из политики: «покой» — это то, что учёт не списывает.
 // now — часы службы; часам помощника здесь верить тем более нельзя.
-func (s *Scrutiny) Observe(sample ipc.Sample, idleThreshold time.Duration, now time.Time) Finding {
+func (s *Scrutiny) Observe(sample ipc.Sample, own ipc.LockState, idleThreshold time.Duration, now time.Time) Finding {
+	s.ownLock = own
+	lockLie := s.checkLock(sample, own, now)
+
+	// Дальше разбираем уже исправленное наблюдение: заявленная блокировка,
+	// которой Windows не подтвердила, покоем не считается, и прятаться за ней
+	// от проверки на противоречии не выйдет.
+	sample = overrideLock(sample, own)
+
 	idle := time.Duration(sample.IdleSeconds) * time.Second
 	atRest := sample.SessionLocked || idle >= idleThreshold
 
@@ -61,23 +91,23 @@ func (s *Scrutiny) Observe(sample ipc.Sample, idleThreshold time.Duration, now t
 		// Покой кончился. Счёт обнулять здесь незачем: он обнуляется при входе
 		// в покой ниже, а лишнее присваивание только делает вид, что важно.
 		s.atRest = false
-		return Finding{}
+		return lockLie
 	}
 
 	if !s.atRest {
 		// Покой только начался: первое окно берём за точку отсчёта.
 		s.atRest, s.changes, s.lastProcess = true, 0, sample.Process
-		return Finding{}
+		return lockLie
 	}
 
 	if sample.Process == s.lastProcess || sample.Process == "" || s.lastProcess == "" {
-		return Finding{}
+		return lockLie
 	}
 	s.lastProcess = sample.Process
 	s.changes++
 
 	if s.changes < LieThreshold {
-		return Finding{}
+		return lockLie
 	}
 
 	// Поймали. Счёт сбрасываем, чтобы не сообщать родителю одно и то же
@@ -108,10 +138,61 @@ func (s *Scrutiny) Distrusted(now time.Time) bool {
 // время идёт как потраченное. Асимметрия та же, что и везде: лишняя минута
 // списания против часов даром.
 func (s *Scrutiny) Correct(sample ipc.Sample, now time.Time) ipc.Sample {
+	// Сперва то, что служба знает сама: это не мера недоверия, а просто более
+	// достоверный ответ на тот же вопрос. Применяется всегда, а не только к
+	// пойманному помощнику.
+	sample = overrideLock(sample, s.ownLock)
+
 	if !s.Distrusted(now) {
 		return sample
 	}
 	sample.IdleSeconds = 0
 	sample.SessionLocked = false
 	return sample
+}
+
+// overrideLock заменяет заявленную блокировку на то, что видит сама служба.
+//
+// В обе стороны, а не только в свою пользу. Подменить ответ Windows о
+// состоянии сессии из-под учётной записи ребёнка нельзя, а заблокировать экран
+// и одновременно им пользоваться нельзя тем более, — значит, этот ответ просто
+// вернее того, что сказал помощник.
+func overrideLock(sample ipc.Sample, own ipc.LockState) ipc.Sample {
+	switch own {
+	case ipc.LockOn:
+		sample.SessionLocked = true
+	case ipc.LockOff:
+		sample.SessionLocked = false
+	}
+	return sample
+}
+
+// checkLock ловит помощника на заявленной блокировке, которой не было.
+//
+// Ловит только эту сторону расхождения. Обратная — помощник говорит «открыт»,
+// Windows говорит «заблокирован» — ребёнку невыгодна и ничего не доказывает:
+// помощник мог замерить экран за мгновение до блокировки. Обвинять за то, что
+// стоило бы обвиняемому времени, незачем.
+func (s *Scrutiny) checkLock(sample ipc.Sample, own ipc.LockState, now time.Time) Finding {
+	if !sample.SessionLocked || own != ipc.LockOff {
+		s.lockOff = 0
+		return Finding{}
+	}
+
+	s.lockOff++
+	if s.lockOff < LockLieThreshold {
+		return Finding{}
+	}
+
+	// Поймали. Счёт сбрасываем, чтобы не повторять родителю одно и то же
+	// каждую секунду, а заявленному покою перестаём верить целиком: помощник,
+	// соврав о блокировке, не заслуживает доверия и в простое.
+	s.lockOff = 0
+	s.distrustUntil = now.Add(DistrustFor)
+	return Finding{
+		Lying: true,
+		Detail: fmt.Sprintf(
+			"помощник сообщает заблокированный экран %d раза подряд, а Windows отвечает, что сессия открыта",
+			LockLieThreshold),
+	}
 }

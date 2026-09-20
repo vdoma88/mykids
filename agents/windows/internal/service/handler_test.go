@@ -21,7 +21,7 @@ func withHelper(t *testing.T, pol config.Policy) (*harness, *ipc.Conn) {
 
 	srv, cli := net.Pipe()
 	go func() {
-		_ = ipc.Serve(srv, h.core.Handler(remote, 2*time.Minute, func() time.Time {
+		_ = ipc.Serve(srv, h.core.Handler(remote, nil, 2*time.Minute, func() time.Time {
 			return h.clk.read().Wall
 		}))
 	}()
