@@ -19,21 +19,38 @@ import (
 // noSession — что возвращает Windows, когда консольной сессии нет вовсе.
 const noSession = 0xFFFFFFFF
 
-// ActiveSession — сессия, в которой сейчас работает пользователь.
+// ConsoleSession — номер консольной сессии, без проверки входа.
+//
+// Ноль означает, что сессии нет совсем. Этот вопрос можно задать из любой
+// программы, в том числе запущенной ребёнком.
+func ConsoleSession() uint32 {
+	if id := windows.WTSGetActiveConsoleSessionId(); id != noSession {
+		return id
+	}
+	return 0
+}
+
+// ActiveSession — сессия, в которой сейчас работает вошедший пользователь.
 //
 // Ноль означает «никого нет»: либо сессии нет совсем, либо на экране
 // приглашение ко входу. Второе важно не меньше первого: там токена ещё не
 // существует, и попытка запуска будет падать до самого входа.
+//
+// Годится только для службы: WTSQueryUserToken требует привилегию SE_TCB_NAME,
+// которой у обычной программы нет. Спросив это из-под ребёнка, всегда получишь
+// ноль — и решишь, что сессии нет, хотя он прямо за этим компьютером.
 func ActiveSession() uint32 {
-	id := windows.WTSGetActiveConsoleSessionId()
-	if id == noSession {
+	id := ConsoleSession()
+	if id == 0 {
 		return 0
 	}
 	var token windows.Token
 	if err := windows.WTSQueryUserToken(id, &token); err != nil {
 		return 0
 	}
-	token.Close()
+	if token != 0 {
+		token.Close()
+	}
 	return id
 }
 

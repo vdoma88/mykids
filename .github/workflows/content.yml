@@ -198,6 +198,8 @@ jobs:
         run: |
           go vet ./...
           GOOS=windows GOARCH=amd64 go vet ./...
+      # Обе программы: агент и оконная проверка. Проверка собирается только
+      # под Windows, и без этого шага её поломку увидел бы релизный прогон.
       - name: Сборка exe
         run: ./build.sh
 
@@ -210,8 +212,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mykids-agent-windows-x64
-          path: agents/windows/dist/mykids-agent.exe
+          name: mykids-windows-x64
+          path: |
+            agents/windows/dist/mykids-agent.exe
+            agents/windows/dist/mykids-check.exe
 
   legacy:
     name: Браузерные тесты
