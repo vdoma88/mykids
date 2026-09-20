@@ -4,6 +4,7 @@ package win32
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -120,7 +121,9 @@ func (o *Overlay) Compact() bool {
 var (
 	overlayOnce  sync.Once
 	overlayClass *uint16
-	overlayReg   error
+	// overlayName держит имя класса живым: overlayClass указывает внутрь него.
+	overlayName []uint16
+	overlayReg  error
 	// Окон бывает два сразу: полоса предупреждения и полноэкранный оверлей.
 	// Поэтому не «текущее окно», а таблица: иначе полоса рисовала бы текст
 	// оверлея, и предупреждение врало бы ребёнку чужими словами.
@@ -136,7 +139,8 @@ func byWindow(hwnd windows.HWND) *Overlay {
 }
 
 func registerClass() {
-	overlayClass = windows.StringToUTF16Ptr("MyKidsOverlay")
+	overlayName = utf16("MyKidsOverlay")
+	overlayClass = &overlayName[0]
 	var inst windows.Handle
 	if err := windows.GetModuleHandleEx(0, nil, &inst); err != nil {
 		overlayReg = fmt.Errorf("GetModuleHandleEx: %w", err)
@@ -201,9 +205,11 @@ func paintOverlay(hwnd windows.HWND) {
 	if compact {
 		height, pad = ^uintptr(21), 16 // -22
 	}
+	face := utf16("Segoe UI")
 	font, _, _ := procCreateFontW.Call(
 		height, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 0, // полужирный
-		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("Segoe UI"))))
+		uintptr(unsafe.Pointer(&face[0])))
+	runtime.KeepAlive(face)
 	if font != 0 {
 		procSelectObject.Call(hdc, font)
 		defer procDeleteObject.Call(font)
@@ -221,17 +227,18 @@ func paintOverlay(hwnd windows.HWND) {
 	// DT_VCENTER работает только с одной строкой, а тут их несколько. Поэтому
 	// сначала меряем текст, потом сдвигаем прямоугольник: иначе объяснение
 	// прижимается к верхней кромке экрана, где его не читают.
-	utf16 := windows.StringToUTF16Ptr(text)
+	buf := utf16(text)
 	measured := area
-	procDrawTextW.Call(hdc, uintptr(unsafe.Pointer(utf16)), ^uintptr(0),
+	procDrawTextW.Call(hdc, uintptr(unsafe.Pointer(&buf[0])), ^uintptr(0),
 		uintptr(unsafe.Pointer(&measured)), dtCalcRect|dtCenter|dtWordBreak)
 	if h := measured.bottom - measured.top; h < area.bottom-area.top {
 		area.top += (area.bottom - area.top - h) / 2
 	}
 
 	procDrawTextW.Call(hdc,
-		uintptr(unsafe.Pointer(utf16)), ^uintptr(0),
+		uintptr(unsafe.Pointer(&buf[0])), ^uintptr(0),
 		uintptr(unsafe.Pointer(&area)), dtCenter|dtWordBreak)
+	runtime.KeepAlive(buf)
 }
 
 // ShowOverlay создаёт полноэкранный оверлей и возвращает управление сразу.
@@ -283,11 +290,13 @@ func show(text string, compact bool) (*Overlay, error) {
 		var inst windows.Handle
 		_ = windows.GetModuleHandleEx(0, nil, &inst)
 
+		name := utf16("MyKids")
 		hwnd, _, err := procCreateWindowExW.Call(
 			wsExTopmost|wsExToolWindow,
 			uintptr(unsafe.Pointer(overlayClass)),
-			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("MyKids"))),
+			uintptr(unsafe.Pointer(&name[0])),
 			wsPopup, x, y, cx, cy, 0, 0, uintptr(inst), 0)
+		runtime.KeepAlive(name)
 		if hwnd == 0 {
 			ready <- fmt.Errorf("CreateWindowExW: %w", err)
 			return

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Сборка агента под Windows x64. Запускается на любой ОС.
+# Сборка программ под Windows x64. Запускается на любой ОС.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p dist
@@ -14,4 +14,14 @@ fi
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
   -ldflags "$LDFLAGS" \
   -o dist/mykids-agent.exe ./cmd/mykids-agent
-echo "собрано: $(du -h dist/mykids-agent.exe | cut -f1)  dist/mykids-agent.exe"
+
+# Проверка собирается как оконная программа: «-H windowsgui» убирает чёрное
+# окно консоли. Её запускают двойным щелчком, и мелькнувшая консоль — первое,
+# что заставляет закрыть программу, не дочитав.
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+  -ldflags "$LDFLAGS -H windowsgui" \
+  -o dist/mykids-check.exe ./cmd/mykids-check
+
+for f in dist/mykids-agent.exe dist/mykids-check.exe; do
+  echo "собрано: $(du -h "$f" | cut -f1)  $f"
+done
