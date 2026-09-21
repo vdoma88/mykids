@@ -45,7 +45,14 @@ func serve(a assembled, o options) error {
 		defer l.Close()
 		log("служба слушает %s", o.pipe)
 
-		go acceptHelpers(l, core, a.remote, a.agent.Policy.IdleThresholdSeconds, log)
+		// Свой источник состояния экрана — единственное, что служба может
+		// узнать о рабочем столе, не спрашивая помощника. Подключается и к
+		// наблюдениям (чтобы молчание помощника не стоило ребёнку времени,
+		// пока экран честно заблокирован), и к проверке на ложь.
+		own := newLockSource()
+		a.remote.SetLockSource(own)
+
+		go acceptHelpers(l, core, a.remote, own, a.agent.Policy.IdleThresholdSeconds, log)
 
 		iv := service.DefaultIntervals()
 		if o.interval > 0 {
@@ -89,7 +96,7 @@ func helperArgs(dataDir string, o options) []string {
 // Каждое соединение обслуживается отдельно: помощник может перезапуститься,
 // а пользовательских сессий бывает несколько.
 func acceptHelpers(l net.Listener, core *service.Core, remote *ipc.Desktop,
-	idleThresholdSeconds int, log func(string, ...any)) {
+	own ipc.LockSource, idleThresholdSeconds int, log func(string, ...any)) {
 
 	idleThreshold := time.Duration(idleThresholdSeconds) * time.Second
 	for {
@@ -101,7 +108,7 @@ func acceptHelpers(l net.Listener, core *service.Core, remote *ipc.Desktop,
 			return // слушатель закрыт — служба выключается
 		}
 		go func() {
-			err := ipc.Serve(conn, core.Handler(remote, idleThreshold, time.Now))
+			err := ipc.Serve(conn, core.Handler(remote, own, idleThreshold, time.Now))
 			if err != nil && !errors.Is(err, ipc.ErrClosed) {
 				// Мусор в канале — либо сломанный помощник, либо подменённый.
 				log("соединение с помощником разорвано: %v", err)
