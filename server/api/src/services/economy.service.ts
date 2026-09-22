@@ -2,6 +2,8 @@ import type { LedgerDraft, Policy, StoreItem } from '@mykids/contracts';
 import {
   awardTaskCredits,
   canPurchase,
+  checkPace,
+  defaultPaceConfig,
   convertCredits,
   dailyGrant,
   evaluateScreen,
@@ -122,6 +124,12 @@ export class EconomyService {
    * Клиент присылает результат проверки, но сумму назначает сервер: потолки
    * пакета и суток, а также cooldown применяются здесь.
    */
+  // Время попытки пишем из input.at, а не оставляем часам базы.
+  //
+  // Проверка темпа сравнивает момент нынешней попытки с моментами прошлых, и
+  // два разных источника времени сделали бы это сравнение бессмысленным.
+  // Безопасности это не трогает: at ставит сервер, из тела запроса он не
+  // приходит — иначе ребёнок сам назначал бы себе промежутки.
   async awardTask(input: {
     childId: string;
     packId: string;
@@ -135,14 +143,43 @@ export class EconomyService {
     const policy = await this.policyFor(input.childId);
     const state = await this.dayState(input.childId, input.at, policy);
 
-    const [lastAward, packToday] = await Promise.all([
+    const [lastAward, packToday, recentAttempts] = await Promise.all([
       this.prisma.attempt.findFirst({
         where: { childId: input.childId, itemId: input.itemId, credits: { gt: 0 } },
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true },
       }),
       this.creditsFromPackToday(input.childId, input.packId, input.at, policy.timezone),
+      // Время прихода последних попыток — по часам сервера. Их и берёт
+      // проверка темпа: длительность, измеренная браузером ребёнка, ничего не
+      // стоит, а промежутки между приходами подделать нельзя, не замедлившись
+      // на самом деле.
+      //
+      // Берём на одну больше порога серии: длиннее для решения не нужно.
+      this.prisma.attempt.findMany({
+        where: { childId: input.childId },
+        orderBy: { createdAt: 'desc' },
+        take: defaultPaceConfig.streak + 1,
+        select: { createdAt: true },
+      }),
     ]);
+
+    // Темп проверяем до потолков: ответы, прокликанные наугад, не должны
+    // съедать дневной лимит — иначе угадывание мешало бы ещё и честной работе
+    // в тот же день.
+    const pace = checkPace({
+      previousAt: recentAttempts.map((a) => a.createdAt),
+      now: input.at,
+    });
+    if (pace.tooFast) {
+      await this.prisma.attempt.create({
+        data: {
+          childId: input.childId, packId: input.packId, itemId: input.itemId,
+          score: input.score, credits: 0, status: 'graded', createdAt: input.at,
+        },
+      });
+      return { credits: 0, withheldReason: pace.message };
+    }
 
     const award = awardTaskCredits({
       credits: input.baseCredits,
@@ -159,7 +196,7 @@ export class EconomyService {
       await this.prisma.attempt.create({
         data: {
           childId: input.childId, packId: input.packId, itemId: input.itemId,
-          score: input.score, credits: 0, status: 'graded',
+          score: input.score, credits: 0, status: 'graded', createdAt: input.at,
         },
       });
       return { credits: 0, withheldReason: award.message };
@@ -171,7 +208,7 @@ export class EconomyService {
       const attempt = await tx.attempt.create({
         data: {
           childId: input.childId, packId: input.packId, itemId: input.itemId,
-          score: input.score, credits: award.credits, status: 'graded',
+          score: input.score, credits: award.credits, status: 'graded', createdAt: input.at,
         },
       });
       if (award.credits > 0) {
