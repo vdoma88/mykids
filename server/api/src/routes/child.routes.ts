@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { pathOf, type Services } from '../app.js';
+import { earnedCredits, grade } from '@mykids/task-runner/grade';
+import { answerSchema } from '../answer.js';
+import { HttpError, pathOf, type Services } from '../app.js';
 
 /**
  * То, что видит и делает ребёнок. Доступ по токену устройства: раннер живёт
@@ -37,25 +39,66 @@ export function registerChildRoutes(app: FastifyInstance, s: Services): void {
   });
 
   /**
-   * Результат задания. Клиент присылает свою оценку, но сумму кредитов
-   * назначает сервер: потолки и cooldown применяются здесь.
+   * Ответ на задание. Присылается сам ответ — и больше ничего.
+   *
+   * Раньше страница присылала ещё и свою оценку, цену задания, потолок пакета
+   * и cooldown, а сервер их применял. То есть ребёнок называл себе цену сам:
+   * весь антифарм обходился одним запросом мимо страницы. Пакеты сервер
+   * отдаёт со своего диска — там же лежат и правильный ответ, и цена, и
+   * потолок, и всё это время он мог посмотреть их сам.
+   *
+   * Осталось ровно одно, что по-прежнему принимается на слово: результат
+   * виджета у типа `interactive`, потому что считает его браузер.
    */
   app.post('/child/attempts', async (req, reply) => {
     const body = z.object({
       packId: z.string().min(1),
       itemId: z.string().min(1),
-      score: z.number().min(0).max(1),
-      baseCredits: z.number().int().min(0).max(50),
-      packDailyCreditCap: z.number().int().min(1).max(500),
-      cooldownHours: z.number().nonnegative().optional(),
+      answer: answerSchema,
     }).parse(req.body);
+    const childId = req.device!.childId;
 
-    const result = await s.economy.awardTask({
-      childId: req.device!.childId, ...body, at: new Date(),
+    // Пакет должен быть назначен именно этому ребёнку и именно сейчас.
+    // Без этой проверки кредиты приносил бы любой пакет из каталога, включая
+    // те, что родитель снял.
+    const assigned = await s.prisma.packAssignment.findFirst({
+      where: { childId, packId: body.packId, enabled: true },
+      select: { id: true },
     });
+    if (!assigned) {
+      throw new HttpError(403, 'pack_not_assigned', `Пакет «${body.packId}» тебе не назначен.`);
+    }
+
+    const terms = s.content.terms(body.packId, body.itemId);
+    if (terms.item.type !== body.answer.type) {
+      throw new HttpError(
+        400, 'answer_type_mismatch',
+        `Ответ типа «${body.answer.type}» не подходит заданию типа «${terms.item.type}».`,
+      );
+    }
+
+    const verdict = grade(terms.item, body.answer);
+    const result = await s.economy.awardTask({
+      childId,
+      packId: body.packId,
+      itemId: body.itemId,
+      score: verdict.score,
+      baseCredits: earnedCredits(terms.item, verdict, terms.creditsPerCorrect),
+      packDailyCreditCap: terms.dailyCreditCap,
+      cooldownHours: terms.cooldownHours,
+      answer: body.answer,
+      pendingApproval: verdict.pendingApproval === true,
+      at: new Date(),
+    });
+
+    // Оценку возвращаем: считает её теперь сервер, и страница ребёнка должна
+    // показывать его ответ, а не свой. Две оценки на одно задание — это две
+    // версии правды, и расходиться они начнут молча.
     return reply.status(201).send({
       ...result,
-      balances: await s.ledger.balances(req.device!.childId),
+      score: verdict.score,
+      ...(verdict.feedback === undefined ? {} : { feedback: verdict.feedback }),
+      balances: await s.ledger.balances(childId),
     });
   });
 

@@ -183,17 +183,23 @@ export const api = {
   childPacks: () => asDevice<{ packs: string[] }>('/child/packs'),
 
   /**
-   * Результат одного задания.
+   * Ответ на одно задание.
    *
-   * Сумму кредитов назначает сервер, а не эта страница: потолки, cooldown и
-   * дневной предел применяются там. Раннер крутится на устройстве ребёнка,
-   * и доверять его арифметике нельзя.
+   * Уходит только сам ответ. Проверяет его и назначает цену сервер: и
+   * правильный ответ, и цена, и потолки лежат в пакете у него на диске.
+   * Страница крутится на устройстве ребёнка, и её арифметика здесь не
+   * значит ничего.
    */
-  childAttempt: (body: {
-    packId: string; itemId: string; score: number; baseCredits: number;
-    packDailyCreditCap: number; cooldownHours?: number;
-  }) =>
-    asDevice<{ credits: number; withheldReason?: string; note?: string; balances: Balances }>(
-      '/child/attempts', { method: 'POST', body: JSON.stringify(body) },
+  childAttempt: (body: { packId: string; itemId: string; answer: unknown }) =>
+    asDevice<{
+      credits: number; score: number; feedback?: string;
+      withheldReason?: string; note?: string; pendingApproval?: true; balances: Balances;
+    }>('/child/attempts', { method: 'POST', body: JSON.stringify(body) }),
+
+  approveAttempt: (id: string) =>
+    asParent<{ credits: number; withheldReason?: string; note?: string }>(
+      `/admin/attempts/${id}/approve`, { method: 'POST' },
     ),
+  rejectAttempt: (id: string) =>
+    asParent<void>(`/admin/attempts/${id}/reject`, { method: 'POST' }),
 };

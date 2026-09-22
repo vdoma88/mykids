@@ -13,6 +13,9 @@ export type Answer =
   | { type: 'likert'; value: number }
   | { type: 'reflection'; text: string }
   | { type: 'parent_verified'; requested: true }
-  | { type: 'interactive'; completed: boolean; score?: number; durationSec?: number };
+  // Явное «| undefined»: при exactOptionalPropertyTypes отсутствующее поле и
+  // поле со значением undefined — разные типы, а приходит это и так, и так:
+  // из виджета в браузере и из разобранного на сервере JSON.
+  | { type: 'interactive'; completed: boolean; score?: number | undefined; durationSec?: number | undefined };
 
 export type AnswerFor<T extends ItemType> = Extract<Answer, { type: T }>;

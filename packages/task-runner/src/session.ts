@@ -2,7 +2,7 @@ import type { EconomyConfig, TaskItem, TaskPack } from '@mykids/contracts';
 import { isScored } from '@mykids/contracts';
 import { awardTaskCredits } from '@mykids/domain';
 import type { Answer } from './answer.js';
-import { grade, type Grade } from './grade.js';
+import { earnedCredits, grade, type Grade } from './grade.js';
 
 /** Что раннер знает о прошлых попытках. Приходит с сервера, здесь только читается. */
 export interface AttemptHistory {
@@ -149,19 +149,10 @@ export class TaskSession {
       };
     }
 
-    // У оцениваемых типов complete означает «верно полностью», поэтому привязывать
-    // начисление к нему нельзя: частичный зачёт заслуживает части кредитов.
-    // У типов без правильного ответа платим за факт выполнения.
-    const earnsCredits = isScored(item.type) ? result.score > 0 : result.complete;
-    if (!earnsCredits) {
+    const scaled = earnedCredits(item, result, item.credits ?? pack.manifest.reward.creditsPerCorrect);
+    if (scaled === 0) {
       return { itemId: item.id, grade: result, creditsAwarded: 0 };
     }
-
-    const base = item.credits ?? pack.manifest.reward.creditsPerCorrect;
-    // Частичный зачёт даёт часть кредитов, но не меньше одного за ненулевой результат.
-    const scaled = isScored(item.type)
-      ? Math.max(1, Math.round(base * result.score))
-      : base;
 
     const award = awardTaskCredits({
       credits: scaled,
