@@ -71,7 +71,7 @@ jobs:
       # tee, а не просто перенаправление: сумму нужно видеть и в логе, чтобы
       # сверить её с тем, что скачали, не распаковывая артефакт.
       - name: Контрольные суммы
-        run: sha256sum mykids-agent.exe mykids-check.exe | tee sha256.txt
+        run: sha256sum mykids-agent.exe mykids-setup.exe mykids-check.exe | tee sha256.txt
         working-directory: agents/windows/dist
 
       - uses: actions/upload-artifact@v4
@@ -80,6 +80,7 @@ jobs:
           path: |
             agents/windows/dist/mykids-agent.exe
             agents/windows/dist/mykids-check.exe
+            agents/windows/dist/mykids-setup.exe
             agents/windows/dist/sha256.txt
             deploy/install-windows.ps1
 
@@ -95,6 +96,7 @@ jobs:
           files: |
             agents/windows/dist/mykids-agent.exe
             agents/windows/dist/mykids-check.exe
+            agents/windows/dist/mykids-setup.exe
             agents/windows/dist/sha256.txt
             deploy/install-windows.ps1
           body_path: agents/windows/RELEASE.md

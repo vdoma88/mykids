@@ -216,6 +216,7 @@ jobs:
           path: |
             agents/windows/dist/mykids-agent.exe
             agents/windows/dist/mykids-check.exe
+            agents/windows/dist/mykids-setup.exe
 
   legacy:
     name: Браузерные тесты
