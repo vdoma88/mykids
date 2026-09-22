@@ -67,11 +67,26 @@ jobs:
         env:
           VERSION: ${{ steps.v.outputs.version }}
 
+      # MSI собирается из уже готовых .exe. Ставить агент можно и без него,
+      # окном установки, — MSI нужен ради записи в «Программах и компонентах»,
+      # ярлыков и обновления поверх.
+      # Собирается всегда, даже когда релиза не будет: холостой запуск («только
+      # сборка») затем и нужен, чтобы поймать поломку до того, как она сорвёт
+      # настоящий релиз. Без версии подставляем 0.0.0 — пакет всё равно
+      # выбрасывается, а шаг проверяется целиком.
+      - name: MSI
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wixl
+          VERSION="${VERSION:-0.0.0}" deploy/build-msi.sh
+
       # Контрольная сумма: без неё нельзя проверить, что скачался наш файл.
       # tee, а не просто перенаправление: сумму нужно видеть и в логе, чтобы
       # сверить её с тем, что скачали, не распаковывая артефакт.
       - name: Контрольные суммы
-        run: sha256sum mykids-agent.exe mykids-setup.exe mykids-check.exe | tee sha256.txt
+        run: sha256sum mykids-agent.exe mykids-setup.exe mykids-check.exe mykids.msi | tee sha256.txt
         working-directory: agents/windows/dist
 
       - uses: actions/upload-artifact@v4
@@ -81,6 +96,7 @@ jobs:
             agents/windows/dist/mykids-agent.exe
             agents/windows/dist/mykids-check.exe
             agents/windows/dist/mykids-setup.exe
+            agents/windows/dist/mykids.msi
             agents/windows/dist/sha256.txt
             deploy/install-windows.ps1
 
@@ -97,6 +113,7 @@ jobs:
             agents/windows/dist/mykids-agent.exe
             agents/windows/dist/mykids-check.exe
             agents/windows/dist/mykids-setup.exe
+            agents/windows/dist/mykids.msi
             agents/windows/dist/sha256.txt
             deploy/install-windows.ps1
           body_path: agents/windows/RELEASE.md

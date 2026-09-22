@@ -4,11 +4,13 @@ package winsvc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -173,10 +175,43 @@ func Uninstall() error {
 	}
 	defer s.Close()
 
+	// Сначала остановить, и это не вежливость. Удаление работающей службы её
+	// не останавливает, а только помечает: процесс продолжает работать до
+	// перезагрузки, уже не числясь в диспетчере. Деинсталлятор следом сносит
+	// файлы — и на машине остаётся работающий агент без своего exe, которого
+	// ни остановить, ни переустановить.
+	//
+	// «Уже остановлена» ошибкой не считаем: удалить её всё равно надо.
+	if err := stop(s); err != nil {
+		return err
+	}
+
 	if err := s.Delete(); err != nil {
 		return fmt.Errorf("удаление службы: %w", err)
 	}
 	_ = eventlog.Remove(Name)
+	return nil
+}
+
+// stop останавливает службу и ждёт, пока она действительно остановится.
+func stop(s *mgr.Service) error {
+	status, err := s.Control(svc.Stop)
+	if err != nil {
+		if errors.Is(err, windows.ERROR_SERVICE_NOT_ACTIVE) {
+			return nil
+		}
+		return fmt.Errorf("остановка службы: %w", err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for status.State != svc.Stopped {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("служба не остановилась за 20 секунд")
+		}
+		time.Sleep(300 * time.Millisecond)
+		if status, err = s.Query(); err != nil {
+			return fmt.Errorf("опрос службы: %w", err)
+		}
+	}
 	return nil
 }
 
