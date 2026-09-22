@@ -96,7 +96,7 @@ func run() error {
 			{Text: "Проверить всё", Do: alsoToFile(checkAll)},
 			{Text: "Показать предупреждение", Do: alsoToFile(showWarning)},
 			{Text: "Закрыть экран на 5 секунд", Do: alsoToFile(showBlock)},
-			{Text: "Скопировать отчёт", Do: func(log func(string)) { copyReport(app, log) }},
+			{Text: "Скопировать отчёт", Do: func(_ win32.Form, log func(string)) { copyReport(app, log) }},
 		},
 	)
 	return win32.RunApp(app)
@@ -105,8 +105,11 @@ func run() error {
 func fail(text string) { win32.Ask("MyKids", text) }
 
 // alsoToFile дублирует всё, что проверка пишет в окно, в файл.
-func alsoToFile(do func(func(string))) func(func(string)) {
-	return func(log func(string)) {
+//
+// Поля ввода этому окну не нужны, и обработчики их не видят: win32.Form здесь
+// просто не участвует.
+func alsoToFile(do func(func(string))) func(win32.Form, func(string)) {
+	return func(_ win32.Form, log func(string)) {
 		do(func(line string) {
 			toFile(line)
 			log(line)

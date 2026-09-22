@@ -45,6 +45,11 @@ const (
 	esMultiline     = 0x0004
 	esReadOnly      = 0x0800
 	esAutoVScroll   = 0x0040
+	esPassword      = 0x0020
+	esAutoHScroll   = 0x0080
+	ssLeft          = 0x00000000
+	wmGetText       = 0x000D
+	wmGetTextLength = 0x000E
 	wmCommand       = 0x0111
 	wmSize          = 0x0005
 	wmSetFont       = 0x0030
@@ -59,14 +64,34 @@ const (
 	colorWindowFace = 5 + 1 // COLOR_WINDOW + 1 для hbrBackground
 )
 
+// Field — поле ввода с подписью.
+//
+// Подпись не украшение: обработчик кнопки берёт значение по ней, а не по
+// номеру. Поля переставляют, и привязка по номеру разъезжается молча —
+// установщик взял бы токен из поля адреса и не заметил.
+type Field struct {
+	Label string
+	Value string
+	// Secret — прятать вводимое. Для токена: он показывается один раз, и
+	// подсмотреть его через плечо ребёнку незачем.
+	Secret bool
+}
+
+// Form — доступ к полям из обработчика кнопки.
+type Form interface {
+	// Value — что сейчас в поле с такой подписью. Пусто, если поля нет.
+	Value(label string) string
+}
+
 // Button — кнопка окна.
 type Button struct {
 	Text string
 	// Do выполняется в отдельной горутине: окно не должно застывать, пока
 	// проверка ждёт три секунды покоя.
 	//
-	// log дописывает строку в отчёт и безопасен для вызова откуда угодно.
-	Do func(log func(string))
+	// f даёт то, что набрано в полях, log дописывает строку в отчёт.
+	// Оба безопасны для вызова откуда угодно.
+	Do func(f Form, log func(string))
 }
 
 // App — окно с кнопками и отчётом.
@@ -74,11 +99,14 @@ type App struct {
 	title   string
 	intro   string
 	buttons []Button
+	fields  []Field
 
-	hwnd  windows.HWND
-	edit  windows.HWND
-	ctrls []windows.HWND
-	font  uintptr
+	hwnd   windows.HWND
+	edit   windows.HWND
+	ctrls  []windows.HWND
+	labels []windows.HWND
+	inputs []windows.HWND
+	font   uintptr
 
 	mu sync.Mutex
 	// text — накопленный отчёт, dirty — есть ли неотрисованные строки.
@@ -94,6 +122,35 @@ var theApp *App
 // NewApp собирает окно. Показывает его RunApp.
 func NewApp(title, intro string, buttons []Button) *App {
 	return &App{title: title, intro: intro, buttons: buttons}
+}
+
+// WithFields добавляет поля ввода над кнопками.
+func (a *App) WithFields(fields ...Field) *App {
+	a.fields = fields
+	return a
+}
+
+// Value — что сейчас набрано в поле с такой подписью.
+//
+// Читаем из самого элемента, а не из своей копии: родитель правит поле после
+// неудачной попытки, и копия отстала бы ровно на ту правку, ради которой он
+// нажал кнопку второй раз.
+func (a *App) Value(label string) string {
+	for i, f := range a.fields {
+		if f.Label != label || i >= len(a.inputs) {
+			continue
+		}
+		h := uintptr(a.inputs[i])
+		n, _, _ := procSendMessageW.Call(h, wmGetTextLength, 0, 0)
+		if n == 0 {
+			return ""
+		}
+		buf := make([]uint16, n+1)
+		procSendMessageW.Call(h, wmGetText, n+1, uintptr(unsafe.Pointer(&buf[0])))
+		runtime.KeepAlive(buf)
+		return windows.UTF16ToString(buf)
+	}
+	return ""
 }
 
 // Log дописывает строку в отчёт. Можно звать из любой горутины.
@@ -130,8 +187,16 @@ func (a *App) render() {
 	buf := utf16(text)
 	procSendMessageW.Call(uintptr(a.edit), wmSetText, 0, uintptr(unsafe.Pointer(&buf[0])))
 	runtime.KeepAlive(buf)
+
 	// Прокручиваем к концу: отчёт читают с последней строки.
-	procSendMessageW.Call(uintptr(a.edit), emSetSel, ^uintptr(0), ^uintptr(0))
+	//
+	// Каретку ставим по длине текста, а не через EM_SETSEL(-1, -1). Минус
+	// единица в первом аргументе означает «снять выделение», а не «в конец»:
+	// каретка остаётся там, где была, и прокрутка уезжает не туда. Работало
+	// это до сих пор случайно — пока отчёт был короче окна, прокручивать было
+	// нечего.
+	n, _, _ := procSendMessageW.Call(uintptr(a.edit), wmGetTextLength, 0, 0)
+	procSendMessageW.Call(uintptr(a.edit), emSetSel, n, n)
 	procSendMessageW.Call(uintptr(a.edit), emScrollCaret, 0, 0)
 }
 
@@ -216,6 +281,35 @@ func (a *App) create() error {
 	a.hwnd = windows.HWND(hwnd)
 	a.font = guiFont()
 
+	// Поля ввода — до кнопок: порядок обхода по Tab идёт в порядке создания,
+	// и родитель, нажимая Tab, должен идти сверху вниз, а не от кнопок назад.
+	static, editClass := utf16("STATIC"), utf16("EDIT")
+	for i, f := range a.fields {
+		caption := utf16(f.Label)
+		lbl, _, _ := procCreateWindowExW.Call(0,
+			uintptr(unsafe.Pointer(&static[0])),
+			uintptr(unsafe.Pointer(&caption[0])),
+			wsChild|wsVisible|ssLeft,
+			0, 0, 10, 10, hwnd, 0, uintptr(inst), 0)
+		runtime.KeepAlive(caption)
+		a.labels = append(a.labels, windows.HWND(lbl))
+		procSendMessageW.Call(lbl, wmSetFont, a.font, 1)
+
+		style := uintptr(wsChild | wsVisible | wsBorder | wsTabStop | esAutoHScroll)
+		if f.Secret {
+			style |= esPassword
+		}
+		value := utf16(f.Value)
+		in, _, _ := procCreateWindowExW.Call(0,
+			uintptr(unsafe.Pointer(&editClass[0])),
+			uintptr(unsafe.Pointer(&value[0])),
+			style, 0, 0, 10, 10, hwnd, uintptr(200+i), uintptr(inst), 0)
+		runtime.KeepAlive(value)
+		a.inputs = append(a.inputs, windows.HWND(in))
+		procSendMessageW.Call(in, wmSetFont, a.font, 1)
+	}
+	runtime.KeepAlive(static)
+
 	button := utf16("BUTTON")
 	for i, b := range a.buttons {
 		caption := utf16(b.Text)
@@ -229,7 +323,6 @@ func (a *App) create() error {
 		procSendMessageW.Call(h, wmSetFont, a.font, 1)
 	}
 
-	editClass := utf16("EDIT")
 	edit, _, _ := procCreateWindowExW.Call(0,
 		uintptr(unsafe.Pointer(&editClass[0])),
 		0,
@@ -278,6 +371,26 @@ func (a *App) layout() {
 
 	const pad, rowH, gap = 12, 34, 8
 	x, y := int32(pad), int32(pad)
+
+	// Поля ввода — по строке на каждое: подпись слева, поле на весь остаток.
+	// Подпись над полем съела бы вдвое больше высоты, а окно установки должно
+	// помещаться целиком: родитель заполняет его один раз и сверху вниз.
+	if len(a.fields) > 0 {
+		label := int32(0)
+		for _, f := range a.fields {
+			if w := int32(len([]rune(f.Label))*9 + 12); w > label {
+				label = w
+			}
+		}
+		for i := range a.fields {
+			procMoveWindow.Call(uintptr(a.labels[i]), uintptr(pad), uintptr(y+7),
+				uintptr(label), 20, 1)
+			procMoveWindow.Call(uintptr(a.inputs[i]), uintptr(pad+label), uintptr(y),
+				uintptr(width-2*pad-label), 26, 1)
+			y += 26 + gap
+		}
+		y += gap
+	}
 
 	// Ширину кнопки считаем по длине подписи: русские надписи длиннее
 	// английских, и фиксированная ширина обрезала бы их.
@@ -372,7 +485,7 @@ func (a *App) click(id int) {
 			}
 		}()
 		if do != nil {
-			do(a.Log)
+			do(a, a.Log)
 		}
 	}()
 }

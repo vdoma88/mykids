@@ -22,6 +22,13 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
   -ldflags "$LDFLAGS -H windowsgui" \
   -o dist/mykids-check.exe ./cmd/mykids-check
 
-for f in dist/mykids-agent.exe dist/mykids-check.exe; do
+# Установщик — тоже оконная программа, и по той же причине: его запускают
+# двойным щелчком, чтобы не открывать командную строку. Мелькнувшая консоль
+# свела бы весь смысл на нет.
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+  -ldflags "$LDFLAGS -H windowsgui" \
+  -o dist/mykids-setup.exe ./cmd/mykids-setup
+
+for f in dist/mykids-agent.exe dist/mykids-check.exe dist/mykids-setup.exe; do
   echo "собрано: $(du -h "$f" | cut -f1)  $f"
 done
