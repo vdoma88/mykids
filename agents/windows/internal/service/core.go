@@ -391,5 +391,6 @@ func Verdict(v usage.Verdict, c screen.Context) ipc.Verdict {
 		LeftSecs: v.LeftSecs,
 		WarnSoon: v.WarnSoon,
 		Screen:   screen.Build(v, c),
+		Tray:     screen.BuildTray(v, c),
 	}
 }
