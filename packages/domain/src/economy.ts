@@ -1,4 +1,5 @@
 import type { EconomyConfig, LedgerDraft, Policy, StoreItem } from '@mykids/contracts';
+import { repeatAward } from './repeat.js';
 import { hoursBetween } from './time.js';
 
 export type Failure<C extends string> = { ok: false; code: C; message: string };
@@ -120,8 +121,13 @@ export interface TaskAwardInput {
   packDailyCreditCap: number;
   /** Сколько кредитов этот пакет уже принёс сегодня. */
   packCreditsToday: number;
-  /** Когда это же задание засчитывалось в прошлый раз. */
-  lastAwardedAt?: Date | undefined;
+  /**
+   * Когда это же задание засчитывалось раньше, новейшее первым.
+   *
+   * Нужно дважды: первая отметка решает, не кончился ли cooldown, а все
+   * недавние — насколько урезать награду за повтор.
+   */
+  awardedAt?: readonly Date[] | undefined;
   cooldownHours?: number | undefined;
   now: Date;
 }
@@ -136,16 +142,26 @@ export type TaskAwardError = 'cooldown_active' | 'pack_cap_reached' | 'daily_cap
  * ограничивает заработок в целом. Начисление урезается до остатка, а не
  * отклоняется целиком — иначе последнее задание дня пропадало бы впустую.
  */
-export function awardTaskCredits(input: TaskAwardInput): Result<{ credits: number }, TaskAwardError> {
-  const { credits, economy, state, packDailyCreditCap, packCreditsToday, now } = input;
+export function awardTaskCredits(
+  input: TaskAwardInput,
+): Result<{ credits: number; note?: string }, TaskAwardError> {
+  const { economy, state, packDailyCreditCap, packCreditsToday, now } = input;
+  const awardedAt = input.awardedAt ?? [];
 
-  if (input.lastAwardedAt && input.cooldownHours && input.cooldownHours > 0) {
-    const elapsed = hoursBetween(input.lastAwardedAt, now);
+  const lastAwardedAt = awardedAt[0];
+  if (lastAwardedAt && input.cooldownHours && input.cooldownHours > 0) {
+    const elapsed = hoursBetween(lastAwardedAt, now);
     if (elapsed < input.cooldownHours) {
       const left = Math.ceil(input.cooldownHours - elapsed);
       return fail('cooldown_active', `Это задание снова принесёт кредиты через ${left} ч.`);
     }
   }
+
+  // Повторы дешевеют до потолков, а не после: урезанная награда должна и
+  // дневной лимит расходовать урезанной, иначе повторение съедало бы его
+  // по полной ставке, ничего не принося.
+  const repeat = repeatAward({ credits: input.credits, awardedAt, now });
+  const credits = repeat.credits;
 
   const packRoom = packDailyCreditCap - packCreditsToday;
   if (packRoom <= 0) {
@@ -157,7 +173,12 @@ export function awardTaskCredits(input: TaskAwardInput): Result<{ credits: numbe
     return fail('daily_cap_reached', 'Дневной лимит кредитов исчерпан.');
   }
 
-  return { ok: true, credits: Math.max(0, Math.min(credits, packRoom, globalRoom)) };
+  const granted = Math.max(0, Math.min(credits, packRoom, globalRoom));
+  // Объяснение про повтор — только если награда дошла до ребёнка целой.
+  // Урезанная потолком, она и так сопровождается своим объяснением, а две
+  // причины подряд читаются как придирка.
+  const note = granted === credits ? repeat.note : '';
+  return note ? { ok: true, credits: granted, note } : { ok: true, credits: granted };
 }
 
 // ---------------------------------------------------------------------- магазин

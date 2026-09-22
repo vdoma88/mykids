@@ -180,6 +180,60 @@ describe('начисление за задания', () => {
     expect(attempts.filter((a) => a.credits === 0).length).toBeGreaterThan(0);
   });
 
+  it('то же задание назавтра приносит вдвое меньше', async () => {
+    // Cooldown не даёт перерешать сегодня, но завтра задание снова стоило бы
+    // полной награды — и так бесконечно. Выгоднее всего было бы решать одни и
+    // те же несколько заданий, которые уже знаешь наизусть.
+    const { childId } = await seedFamily();
+    const day1 = new Date('2026-09-20T12:00:00Z');
+    const day2 = new Date('2026-09-21T13:00:00Z');
+
+    const first = await economy.awardTask(task(childId, { at: day1, cooldownHours: 24 }));
+    expect(first.credits).toBe(10);
+
+    const second = await economy.awardTask(task(childId, { at: day2, cooldownHours: 24 }));
+    expect(second.credits).toBe(5);
+    expect(second.note).toContain('второй раз');
+  });
+
+  it('третье решение стоит ещё меньше второго', async () => {
+    // Одной прошлой отметки для этого мало: с ней второй и третий раз
+    // неразличимы, и служба, шлющая в домен только последнюю, прошла бы
+    // проверку. Нужны три дня подряд.
+    const { childId } = await seedFamily();
+    const day = (n: number) => new Date(`2026-09-2${n}T12:00:00Z`);
+
+    expect((await economy.awardTask(task(childId, { at: day(0), cooldownHours: 24 }))).credits).toBe(10);
+    expect((await economy.awardTask(task(childId, { at: day(1), cooldownHours: 24 }))).credits).toBe(5);
+
+    const third = await economy.awardTask(task(childId, { at: day(2), cooldownHours: 24 }));
+    expect(third.credits).toBe(3);
+    expect(third.note).toContain('третий раз');
+  });
+
+  it('задание, забытое на месяц, снова стоит полной награды', async () => {
+    // Возврат после долгого перерыва — самое полезное повторение из
+    // возможных, и наказывать за него было бы ровно наоборот.
+    const { childId } = await seedFamily();
+    await economy.awardTask(task(childId, { at: new Date('2026-07-01T12:00:00Z') }));
+    const later = await economy.awardTask(task(childId, { at: new Date('2026-09-22T12:00:00Z') }));
+    expect(later.credits).toBe(10);
+    expect(later.note).toBeUndefined();
+  });
+
+  it('разные задания друг друга не удешевляют', async () => {
+    // Затухание привязано к заданию, а не к ребёнку: решать новое всегда
+    // выгоднее, чем повторять старое, — в этом весь смысл.
+    const { childId } = await seedFamily();
+    const start = new Date('2026-09-22T12:00:00Z');
+    for (let i = 0; i < 3; i++) {
+      const r = await economy.awardTask(task(childId, {
+        itemId: `item-${i}`, at: new Date(start.getTime() + i * 60_000),
+      }));
+      expect(r.credits).toBe(10);
+    }
+  });
+
   it('неудачная попытка всё равно фиксируется', async () => {
     const { childId } = await seedFamily();
     await economy.awardTask(task(childId, { cooldownHours: 24 }));
