@@ -138,6 +138,17 @@ func runHelper(o options) error {
 	var lostSince time.Time
 	blocked := false
 
+	// Значок в трее — единственное, что видно, пока ничего не закрыто. До него
+	// агент был невидим до самого конца, и для подростка это выглядело как
+	// слежка, которая вдруг вмешалась, а не как правило, о котором
+	// договорились. Правило, которое нельзя посмотреть, ничем не отличается
+	// от произвола.
+	//
+	// Вешаем его сразу, ещё до первого ответа службы: пустой трей в первые
+	// секунды после входа в систему выглядит как незапустившаяся программа.
+	showTray(helper.StartingTray())
+	defer hideTray()
+
 	// Предупреждение экран не перекрывает: отнять его у подростка ровно тогда,
 	// когда он спешит сохраниться, — значит сделать предупреждение бесполезным.
 	apply := func(s screen.Screen) {
@@ -184,6 +195,7 @@ func runHelper(o options) error {
 					if lostSince.IsZero() {
 						lostSince = time.Now()
 					}
+					showTray(helper.TrayOnServiceLost(time.Since(lostSince)))
 					apply(helper.OnServiceLost(time.Since(lostSince)))
 					continue
 				}
@@ -214,9 +226,11 @@ func runHelper(o options) error {
 				if lostSince.IsZero() {
 					lostSince = time.Now()
 				}
+				showTray(helper.TrayOnServiceLost(time.Since(lostSince)))
 				apply(helper.OnServiceLost(time.Since(lostSince)))
 				continue
 			}
+			showTray(v.Tray)
 			apply(helper.OnVerdict(v))
 		}
 	}

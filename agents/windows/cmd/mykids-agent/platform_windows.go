@@ -3,6 +3,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/agent"
@@ -119,4 +121,33 @@ func newLockSource() ipc.LockSource {
 			return ipc.LockOff
 		}
 	})
+}
+
+// tray — значок в трее. Один на помощника: он и есть «программа в трее».
+var tray *win32.Tray
+
+// showTray вешает или обновляет значок.
+//
+// Ошибку не поднимаем: без значка агент считает время ровно так же, а ронять
+// помощника из-за подписи под курсором — менять полезное на красивое.
+func showTray(s screen.Tray) {
+	if tray != nil && tray.Alive() {
+		tray.Update(s)
+		return
+	}
+	tray = nil
+	t, err := win32.ShowTray(s)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "значок в трее: %v\n", err)
+		return
+	}
+	tray = t
+}
+
+// hideTray убирает значок при выходе.
+func hideTray() {
+	if tray != nil {
+		tray.Close()
+		tray = nil
+	}
 }

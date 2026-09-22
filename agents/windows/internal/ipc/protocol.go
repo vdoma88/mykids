@@ -48,6 +48,10 @@ type Verdict struct {
 	LeftSecs int           `json:"leftSecs"`
 	WarnSoon bool          `json:"warnSoon"`
 	Screen   screen.Screen `json:"screen,omitempty"`
+	// Tray — подпись и меню значка. Готовит их служба по той же причине, что и
+	// текст экрана: помощник работает с правами ребёнка, и сочинять надписи
+	// ему не положено.
+	Tray screen.Tray `json:"tray,omitempty"`
 }
 
 // ErrClosed — собеседник закрыл соединение. Не ошибка: помощник перезапускается,

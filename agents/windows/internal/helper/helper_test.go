@@ -91,3 +91,37 @@ func TestLostServiceMessageSaysHowLong(t *testing.T) {
 		t.Fatalf("в сообщении нет длительности: %+v", s.Lines)
 	}
 }
+
+func TestTrayNeverShowsAStaleCountdown(t *testing.T) {
+	// Пока службы не слышно, последний известный остаток устаревает с каждой
+	// секундой, а выглядит как свежий. Числа минут в подписи быть не должно.
+	tip := TrayOnServiceLost(5 * time.Minute).Tip
+	if strings.Contains(tip, "Осталось") {
+		t.Fatalf("подпись показывает остаток, которого никто не считает: %q", tip)
+	}
+	if !strings.Contains(tip, "нет связи") && !strings.Contains(tip, "Нет связи") {
+		t.Fatalf("не сказано, почему числа нет: %q", tip)
+	}
+}
+
+func TestStartingTrayPromisesNothing(t *testing.T) {
+	// До первого ответа службы помощник не знает ничего и выдумывать не должен.
+	tr := StartingTray()
+	if tr.Tip == "" {
+		t.Fatal("пустая подпись читается как незапустившаяся программа")
+	}
+	for _, it := range tr.Items {
+		if strings.Contains(it.Label, "Осталось") {
+			t.Fatalf("помощник назвал остаток, которого не знает: %q", it.Label)
+		}
+	}
+}
+
+func TestHelperTraysCarryTheProgramName(t *testing.T) {
+	// В трее десяток значков; без имени непонятно, чей этот.
+	for _, tr := range []screen.Tray{StartingTray(), TrayOnServiceLost(time.Minute)} {
+		if !strings.HasPrefix(tr.Tip, "MyKids") {
+			t.Fatalf("подпись без имени программы: %q", tr.Tip)
+		}
+	}
+}

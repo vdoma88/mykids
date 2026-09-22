@@ -101,3 +101,20 @@ func newLockSource() ipc.LockSource {
 		}
 	})
 }
+
+// shownTray — что уже напечатано про значок. Вне Windows трея нет, и печатать
+// одну строку раз в секунду незачем: в таком выводе не видно, когда подпись
+// сменилась, а ради этого его и смотрят.
+var shownTray string
+
+// showTray вне Windows печатает подпись. Не заглушка ради компиляции: так
+// двухпроцессный прогон видит, что служба вообще её присылает.
+func showTray(s screen.Tray) {
+	if s.Tip == shownTray {
+		return
+	}
+	shownTray = s.Tip
+	fmt.Println("ТРЕЙ:", s.Tip)
+}
+
+func hideTray() { shownTray = "" }
