@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Установщик MSI.
+
+  Ставить агент можно и без него — окном mykids-setup.exe, и так проще всего.
+  MSI нужен для другого:
+
+    - запись в «Программах и компонентах», а с ней удаление одной кнопкой.
+      Без неё удалять пришлось бы двумя командами в PowerShell, а программа,
+      которую нельзя убрать привычным способом, ощущается как навязанная;
+    - ярлыки в меню «Пуск»: три .exe в папке никто не найдёт через полгода;
+    - обновление поверх старой версии без ручного копирования файлов.
+
+  Привязку устройства MSI не делает и делать не должен: токен показывается
+  один раз и вводится человеком. Поэтому порядок такой — MSI кладёт файлы,
+  а дальше родитель открывает «MyKids — установка» из меню «Пуск».
+
+  Собирается wixl (msitools) на любой ОС; см. deploy/build-msi.sh.
+
+  ВАЖНО про wixl 0.103. Он падает с segfault, не сказав ни слова, на двух
+  вещах, и обе легко внести не заметив:
+
+    - латиница и кириллица в одной видимой строке. «MyKids — установка»
+      роняет сборку, «MyKids» и «Установка» по отдельности — нет;
+    - кириллица в пути ключа реестра.
+
+  И главное, что обнаружилось не сразу: даже когда сборка проходит, wixl
+  молча выбрасывает не-ASCII из табличных столбцов. Кириллическая подпись
+  ярлыка не попадает в пакет ни в какой кодировке — её просто нет в файле, и
+  в меню «Пуск» получились бы два пункта без названий. Проверено поиском по
+  байтам готового MSI.
+
+  Уцелевает кириллица только в потоке сводки (Package Description) — там она
+  лежит в UTF-8 и читается. Поэтому ниже все подписи латиницей, а по-русски
+  сказано только то, что попадает в сводку. Собранный настоящим WiX под
+  Windows пакет этого ограничения не имел бы.
+
+  Он же молча падает на любом неподдерживаемом атрибуте (так вышло с
+  MajorUpgrade Schedule). Если сборка вдруг перестанет работать без
+  объяснений — искать надо здесь, а не в XML.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!--
+    UpgradeCode постоянен на всю жизнь продукта: по нему Windows узнаёт, что
+    новый пакет — это та же программа, и обновляет её, а не ставит второй раз.
+    Менять его нельзя никогда.
+  -->
+  <Product Id="*"
+           Name="MyKids"
+           Language="1049"
+           Version="$(var.Version)"
+           Manufacturer="MyKids"
+           UpgradeCode="8f2b4c16-5d3e-4a71-9c08-6e5f1a2b3c4d">
+
+    <Package InstallerVersion="300"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="Экранное время за учебные задания"/>
+
+    <!--
+      Обновление: Windows удаляет старую версию до установки новой (порядок по
+      умолчанию — afterInstallValidate), иначе деинсталлятор старой снёс бы
+      файлы, только что положенные новой.
+
+      Атрибут Schedule здесь не указан нарочно: wixl 0.103 его не знает и
+      падает с segfault, а не жалуется. Он в этом вообще нетерпим к
+      неподдерживаемым атрибутам — если сборка вдруг начнёт падать без
+      объяснений, искать надо здесь.
+    -->
+    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия MyKids. Сначала удалите её."/>
+
+    <Media Id="1" Cabinet="mykids.cab" EmbedCab="yes"/>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="MyKids">
+
+          <!-- Агент: сама программа, которую запускает служба. -->
+          <Component Id="Agent" Guid="*">
+            <File Id="AgentExe" Name="mykids-agent.exe"
+                  Source="$(var.Dist)/mykids-agent.exe" KeyPath="yes"/>
+          </Component>
+
+          <Component Id="Setup" Guid="*">
+            <File Id="SetupExe" Name="mykids-setup.exe"
+                  Source="$(var.Dist)/mykids-setup.exe" KeyPath="yes"/>
+          </Component>
+
+          <Component Id="Check" Guid="*">
+            <File Id="CheckExe" Name="mykids-check.exe"
+                  Source="$(var.Dist)/mykids-check.exe" KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="MenuDir" Name="MyKids">
+          <Component Id="Shortcuts" Guid="*">
+            <!--
+              Установка первой: ею пользуются один раз, но именно её ищут
+              сразу после установки пакета.
+
+              Подписи латиницей не от хорошей жизни: кириллические wixl 0.103
+              выбрасывает молча, и пункты остались бы без названий (см. шапку).
+            -->
+            <Shortcut Id="SetupLink"
+                      Name="MyKids Setup"
+                      Description="Bind this computer to the home server and start the service"
+                      Target="[INSTALLDIR]mykids-setup.exe"
+                      WorkingDirectory="INSTALLDIR"/>
+            <Shortcut Id="CheckLink"
+                      Name="MyKids Check"
+                      Description="See what the agent can observe on this machine"
+                      Target="[INSTALLDIR]mykids-check.exe"
+                      WorkingDirectory="INSTALLDIR"/>
+            <RemoveFolder Id="MenuDir" On="uninstall"/>
+            <!--
+              Ключ реестра как KeyPath: у компонента с одними ярлыками другого
+              признака установленности нет. Путь строго латиницей — wixl 0.103
+              падает с segfault на кириллице именно здесь (в остальных полях
+              она проходит).
+            -->
+            <RegistryValue Root="HKLM" Key="Software\MyKids"
+                           Name="Shortcuts" Type="integer" Value="1" KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Main" Title="MyKids" Level="1">
+      <ComponentRef Id="Agent"/>
+      <ComponentRef Id="Setup"/>
+      <ComponentRef Id="Check"/>
+      <ComponentRef Id="Shortcuts"/>
+    </Feature>
+
+    <!--
+      При удалении снимаем службу, и это обязательно.
+      Службу регистрирует не MSI, а сам агент (ей нужен каталог данных,
+      который знает только установщик), поэтому Windows о ней не знает и при
+      удалении её не тронет. Оставить её значило бы получить запись в
+      диспетчере, указывающую на стёртый .exe: при каждой загрузке ошибка в
+      журнале, а переустановить поверх нельзя.
+
+      Return="ignore": если службы нет вовсе — а так и будет у того, кто
+      поставил пакет и не дошёл до привязки, — удаление не должно падать.
+    -->
+    <CustomAction Id="RemoveService"
+                  FileKey="AgentExe"
+                  ExeCommand="service uninstall"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore"/>
+
+    <InstallExecuteSequence>
+      <Custom Action="RemoveService" Before="RemoveFiles">REMOVE="ALL"</Custom>
+    </InstallExecuteSequence>
+
+    <!--
+      Каталог данных C:\ProgramData\MyKids при удалении остаётся намеренно.
+      В нём состояние учёта и очередь расхода — то есть история заработанного
+      и потраченного. Стереть её молча значило бы потерять данные, о которых
+      никто не спрашивал; кому надо, удалит папку руками.
+    -->
+  </Product>
+</Wix>
