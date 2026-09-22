@@ -102,11 +102,15 @@ describe('начисление за задания', () => {
 
   it('урезает до остатка потолка пакета', async () => {
     const { childId } = await seedFamily();
+    // Задания решаются по-человечески, с паузами: иначе сработает проверка
+    // темпа, и потолок пакета проверить не удастся — до него дело не дойдёт.
+    const start = new Date('2026-09-22T12:00:00Z');
+    const after = (minutes: number) => new Date(start.getTime() + minutes * 60_000);
     for (let i = 0; i < 4; i++) {
-      await economy.awardTask(task(childId, { itemId: `item-${i}` }));
+      await economy.awardTask(task(childId, { itemId: `item-${i}`, at: after(i) }));
     }
     // 40 из 40 выбрано, следующее задание ничего не принесёт
-    const r = await economy.awardTask(task(childId, { itemId: 'item-9' }));
+    const r = await economy.awardTask(task(childId, { itemId: 'item-9', at: after(4) }));
     expect(r.credits).toBe(0);
     expect(r.withheldReason).toContain('набору');
   });
@@ -118,6 +122,62 @@ describe('начисление за задания', () => {
     expect(again.credits).toBe(0);
     expect(again.withheldReason).toContain('через');
     expect(await ledger.balance(childId, 'credits')).toBe(10);
+  });
+
+  it('прокликанный наугад пакет не приносит кредитов', async () => {
+    // Десять заданий с четырьмя вариантами ответа можно прокликать за
+    // полминуты: четверть попаданий случайна, а кредиты за них начислялись бы
+    // наравне с настоящими.
+    const { childId } = await seedFamily();
+    const start = new Date('2026-09-22T12:00:00Z');
+    const results = [];
+    for (let i = 0; i < 6; i++) {
+      results.push(await economy.awardTask(task(childId, {
+        itemId: `item-${i}`,
+        at: new Date(start.getTime() + i * 1500), // полтора секунды на задание
+      })));
+    }
+    const withheld = results.filter((r) => r.credits === 0);
+    expect(withheld.length).toBeGreaterThan(0);
+    expect(withheld[0]!.withheldReason).toContain('угаданное');
+  });
+
+  it('быстрые ответы не съедают дневной лимит', async () => {
+    // Иначе угадывание мешало бы ещё и честной работе в тот же день: потолок
+    // выбран, а заработано ничего.
+    const { childId } = await seedFamily();
+    const start = new Date('2026-09-22T12:00:00Z');
+    for (let i = 0; i < 6; i++) {
+      await economy.awardTask(task(childId, { itemId: `item-${i}`, at: new Date(start.getTime() + i * 1500) }));
+    }
+    // Одумался и решил по-человечески — кредиты идут.
+    const slow = await economy.awardTask(task(childId, {
+      itemId: 'item-slow', at: new Date(start.getTime() + 10 * 60_000),
+    }));
+    expect(slow.credits).toBe(10);
+  });
+
+  it('один быстрый верный ответ засчитывается', async () => {
+    // Ребёнок, который знает ответ, отвечает быстро. Это цель, а не нарушение.
+    const { childId } = await seedFamily();
+    const start = new Date('2026-09-22T12:00:00Z');
+    await economy.awardTask(task(childId, { itemId: 'item-a', at: start }));
+    const quick = await economy.awardTask(task(childId, {
+      itemId: 'item-b', at: new Date(start.getTime() + 1000),
+    }));
+    expect(quick.credits).toBe(10);
+  });
+
+  it('отклонённая по темпу попытка остаётся в журнале', async () => {
+    // Родитель должен видеть, что происходило, а не только итог.
+    const { childId } = await seedFamily();
+    const start = new Date('2026-09-22T12:00:00Z');
+    for (let i = 0; i < 6; i++) {
+      await economy.awardTask(task(childId, { itemId: `item-${i}`, at: new Date(start.getTime() + i * 1500) }));
+    }
+    const attempts = await prisma.attempt.findMany({ where: { childId } });
+    expect(attempts).toHaveLength(6);
+    expect(attempts.filter((a) => a.credits === 0).length).toBeGreaterThan(0);
   });
 
   it('неудачная попытка всё равно фиксируется', async () => {
