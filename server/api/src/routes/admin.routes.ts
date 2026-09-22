@@ -294,4 +294,21 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
     ]);
     return { purchases, attempts };
   });
+
+  /**
+   * Родитель подтверждает задание, которое машиной не проверить: «прибрался в
+   * комнате», «позвонил бабушке». Кредиты назначаются в этот момент, по цене
+   * из пакета и сегодняшним потолкам, — подтверждение снимает только то
+   * условие, которое сервер проверить не мог, а не правила экономики.
+   */
+  app.post('/admin/attempts/:id/approve', async (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    return s.economy.approveAttempt(id, req.guardian!.familyId, new Date());
+  });
+
+  app.post('/admin/attempts/:id/reject', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    await s.economy.rejectAttempt(id, req.guardian!.familyId, new Date());
+    return reply.status(204).send();
+  });
 }

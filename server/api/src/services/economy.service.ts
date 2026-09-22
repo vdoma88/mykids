@@ -12,8 +12,9 @@ import {
   type DayState,
   type ScreenState,
 } from '@mykids/domain';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type AttemptStatus, type PrismaClient } from '@prisma/client';
 import { toDomainPolicy } from '../mapping.js';
+import { ContentService } from './content.service.js';
 import { LedgerService } from './ledger.service.js';
 
 /** Начало окна повторов: отметки старше него на награду уже не влияют. */
@@ -38,7 +39,14 @@ export class RuleError extends Error {
 export class EconomyService {
   private readonly ledger: LedgerService;
 
-  constructor(private readonly prisma: PrismaClient) {
+  constructor(
+    private readonly prisma: PrismaClient,
+    /**
+     * Пакеты на диске. По умолчанию пустые: экономику можно проверять и без
+     * каталога, но подтвердить задание без него нельзя — цену брать неоткуда.
+     */
+    private readonly content: ContentService = new ContentService(undefined),
+  ) {
     this.ledger = new LedgerService(prisma);
   }
 
@@ -144,29 +152,17 @@ export class EconomyService {
     baseCredits: number;
     packDailyCreditCap: number;
     cooldownHours?: number | undefined;
+    /** Что именно ответил ребёнок. Родителю это единственный способ понять, за что он платит. */
+    answer?: unknown;
+    /** Задание из тех, что проверить машиной нельзя: кредиты ждут родителя. */
+    pendingApproval?: boolean;
     at: Date;
-  }): Promise<{ credits: number; withheldReason?: string; note?: string }> {
+  }): Promise<{ credits: number; withheldReason?: string; note?: string; pendingApproval?: true }> {
     const policy = await this.policyFor(input.childId);
     const state = await this.dayState(input.childId, input.at, policy);
 
     const [priorAwards, packToday, recentAttempts] = await Promise.all([
-      // Не одна последняя отметка, а все за окно повторов: первая решает,
-      // кончился ли cooldown, остальные — насколько урезать награду за то,
-      // что это же задание уже решали недавно.
-      //
-      // Ограничение по дате здесь — чтобы не тащить всю историю задания за
-      // год; отбрасывает старые отметки всё равно домен, и правило там одно.
-      // Убрав это условие, поведения не изменишь, только запрос растолстеет.
-      this.prisma.attempt.findMany({
-        where: {
-          childId: input.childId,
-          itemId: input.itemId,
-          credits: { gt: 0 },
-          createdAt: { gte: windowStart(input.at, defaultRepeatConfig.windowDays) },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
-      }),
+      this.priorAwards(input.childId, input.itemId, input.at),
       this.creditsFromPackToday(input.childId, input.packId, input.at, policy.timezone),
       // Время прихода последних попыток — по часам сервера. Их и берёт
       // проверка темпа: длительность, измеренная браузером ребёнка, ничего не
@@ -191,12 +187,20 @@ export class EconomyService {
     });
     if (pace.tooFast) {
       await this.prisma.attempt.create({
-        data: {
-          childId: input.childId, packId: input.packId, itemId: input.itemId,
-          score: input.score, credits: 0, status: 'graded', createdAt: input.at,
-        },
+        data: this.attemptRow(input, { credits: 0, status: 'graded' }),
       });
       return { credits: 0, withheldReason: pace.message };
+    }
+
+    // Задание, которое проверяет родитель, дальше не идёт: кредиты за него
+    // назначаются в момент подтверждения, и потолки применяются тогда же.
+    // Иначе «сделал уроки, честное слово» стоило бы ровно нажатия кнопки —
+    // а таких заданий в пакетах больше половины.
+    if (input.pendingApproval === true) {
+      await this.prisma.attempt.create({
+        data: this.attemptRow(input, { credits: 0, status: 'pending_approval' }),
+      });
+      return { credits: 0, pendingApproval: true };
     }
 
     const award = awardTaskCredits({
@@ -205,17 +209,14 @@ export class EconomyService {
       state: { creditsEarnedToday: state.creditsEarnedToday },
       packDailyCreditCap: input.packDailyCreditCap,
       packCreditsToday: packToday,
-      awardedAt: priorAwards.map((a) => a.createdAt),
+      awardedAt: priorAwards,
       cooldownHours: input.cooldownHours,
       now: input.at,
     });
 
     if (!award.ok) {
       await this.prisma.attempt.create({
-        data: {
-          childId: input.childId, packId: input.packId, itemId: input.itemId,
-          score: input.score, credits: 0, status: 'graded', createdAt: input.at,
-        },
+        data: this.attemptRow(input, { credits: 0, status: 'graded' }),
       });
       return { credits: 0, withheldReason: award.message };
     }
@@ -224,10 +225,7 @@ export class EconomyService {
     // начислены без следа о том, за что.
     await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.attempt.create({
-        data: {
-          childId: input.childId, packId: input.packId, itemId: input.itemId,
-          score: input.score, credits: award.credits, status: 'graded', createdAt: input.at,
-        },
+        data: this.attemptRow(input, { credits: award.credits, status: 'graded' }),
       });
       if (award.credits > 0) {
         await tx.ledgerEntry.create({
@@ -240,6 +238,116 @@ export class EconomyService {
       }
     });
     return award.note ? { credits: award.credits, note: award.note } : { credits: award.credits };
+  }
+
+  /**
+   * Строка попытки. Одна на все исходы: и начисление, и отказ, и ожидание
+   * родителя пишутся одинаково, иначе «не засчитано» не отличить от «не
+   * дошло».
+   */
+  private attemptRow(
+    input: { childId: string; packId: string; itemId: string; score: number; answer?: unknown; at: Date },
+    outcome: { credits: number; status: AttemptStatus },
+  ): Prisma.AttemptUncheckedCreateInput {
+    return {
+      childId: input.childId, packId: input.packId, itemId: input.itemId,
+      score: input.score, credits: outcome.credits, status: outcome.status,
+      createdAt: input.at,
+      ...(input.answer === undefined ? {} : { answer: input.answer as Prisma.InputJsonValue }),
+    };
+  }
+
+  /**
+   * Родитель подтвердил задание, которое машиной не проверить.
+   *
+   * Кредиты назначаются здесь, а не в момент отправки: цена берётся из
+   * пакета на диске, потолки — сегодняшние, затухание за повтор — то же
+   * самое. Подтверждение не обходит ни одно правило, оно только снимает
+   * условие, которое сервер проверить не мог.
+   */
+  async approveAttempt(
+    attemptId: string, familyId: string, at: Date,
+  ): Promise<{ credits: number; withheldReason?: string; note?: string }> {
+    const attempt = await this.prisma.attempt.findFirst({
+      where: { id: attemptId, status: 'pending_approval', child: { familyId } },
+    });
+    if (!attempt) throw new NotFoundError('задание не найдено или уже разобрано');
+
+    const terms = this.content.terms(attempt.packId, attempt.itemId);
+    const policy = await this.policyFor(attempt.childId);
+    const state = await this.dayState(attempt.childId, at, policy);
+    const [priorAwards, packToday] = await Promise.all([
+      this.priorAwards(attempt.childId, attempt.itemId, at),
+      this.creditsFromPackToday(attempt.childId, attempt.packId, at, policy.timezone),
+    ]);
+
+    const award = awardTaskCredits({
+      credits: terms.creditsPerCorrect,
+      economy: policy.economy,
+      state: { creditsEarnedToday: state.creditsEarnedToday },
+      packDailyCreditCap: terms.dailyCreditCap,
+      packCreditsToday: packToday,
+      awardedAt: priorAwards,
+      cooldownHours: terms.cooldownHours,
+      now: at,
+    });
+
+    // Упёрлись в сегодняшний потолок — оставляем в очереди, а не закрываем
+    // нулём: работа сделана, и завтра за неё заплатят. Закрыв её сейчас,
+    // родитель потерял бы её навсегда, ничего об этом не узнав.
+    if (!award.ok) return { credits: 0, withheldReason: award.message };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.attempt.update({
+        where: { id: attempt.id },
+        data: { status: 'approved', credits: award.credits, decidedAt: at },
+      });
+      if (award.credits > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            childId: attempt.childId, currency: 'credits', amount: award.credits,
+            reason: 'task_reward', refType: 'attempt', refId: attempt.id,
+            deviceId: null, occurredAt: at, seq: 0,
+          },
+        });
+      }
+    });
+    return award.note ? { credits: award.credits, note: award.note } : { credits: award.credits };
+  }
+
+  /** Родитель не подтвердил. Кредитов нет, но и следа не теряем. */
+  async rejectAttempt(attemptId: string, familyId: string, at: Date): Promise<void> {
+    const attempt = await this.prisma.attempt.findFirst({
+      where: { id: attemptId, status: 'pending_approval', child: { familyId } },
+      select: { id: true },
+    });
+    if (!attempt) throw new NotFoundError('задание не найдено или уже разобрано');
+    await this.prisma.attempt.update({
+      where: { id: attempt.id }, data: { status: 'rejected', decidedAt: at },
+    });
+  }
+
+  /**
+   * Когда это задание уже приносило кредиты за окно повторов.
+   *
+   * Не одна последняя отметка, а все за окно: первая решает, кончился ли
+   * cooldown, остальные — насколько урезать награду за то, что это же
+   * задание уже решали недавно.
+   *
+   * Ограничение по дате здесь — чтобы не тащить всю историю задания за год;
+   * отбрасывает старые отметки всё равно домен, и правило там одно. Убрав
+   * это условие, поведения не изменишь, только запрос растолстеет.
+   */
+  private async priorAwards(childId: string, itemId: string, at: Date): Promise<Date[]> {
+    const rows = await this.prisma.attempt.findMany({
+      where: {
+        childId, itemId, credits: { gt: 0 },
+        createdAt: { gte: windowStart(at, defaultRepeatConfig.windowDays) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    return rows.map((r) => r.createdAt);
   }
 
   private async creditsFromPackToday(

@@ -281,23 +281,21 @@ describe('ребёнок и агент', () => {
     expect(res.json()).toMatchObject({ name: 'Марк', policy: expect.any(Object) });
   });
 
-  it('кредиты за задание назначает сервер, а не клиент', async () => {
+  it('выдуманный пакет не приносит кредитов', async () => {
+    // Это приложение поднято без каталога заданий, поэтому назначить ребёнку
+    // нечего — и любой присланный пакет чужой. Начисления, которые тут
+    // проверяются по-настоящему, живут в attempts.test.ts, где каталог есть.
     const { device } = await withChild();
     const res = await app.inject({
       method: 'POST', url: '/child/attempts', headers: device,
       payload: {
-        packId: 'ru.test', itemId: 'i1', score: 1,
-        baseCredits: 10, packDailyCreditCap: 12,
+        packId: 'ru.test', itemId: 'i1',
+        answer: { type: 'numeric', raw: '6' },
       },
     });
-    expect(res.json()).toMatchObject({ credits: 10 });
-
-    // Второе задание упрётся в потолок пакета — сервер урежет до остатка
-    const second = await app.inject({
-      method: 'POST', url: '/child/attempts', headers: device,
-      payload: { packId: 'ru.test', itemId: 'i2', score: 1, baseCredits: 10, packDailyCreditCap: 12 },
-    });
-    expect(second.json()).toMatchObject({ credits: 2 });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: 'pack_not_assigned' });
+    expect(await prisma.ledgerEntry.count({ where: { reason: 'task_reward' } })).toBe(0);
   });
 
   it('обмен без кредитов отдаёт 409 с кодом правила', async () => {

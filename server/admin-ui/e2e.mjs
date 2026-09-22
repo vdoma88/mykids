@@ -89,6 +89,18 @@ async function answerItem(page, item) {
   }
 }
 
+/** Запрос от имени устройства ребёнка — тем же способом, что и его страница. */
+async function postJson(url, token, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(`${url}: ${res.status} ${JSON.stringify(json)}`);
+  return json;
+}
+
 async function waitFor(url, tries = 80) {
   for (let i = 0; i < tries; i++) {
     try { if ((await fetch(url)).ok) return; } catch { /* ещё не поднялся */ }
@@ -183,7 +195,12 @@ async function main() {
     // --- пакеты заданий: без них ребёнку нечем зарабатывать кредиты,
     // и весь остальной экран у него бессмыслен
     const pack = 'ru.mykids.physics.mechanics.basic';
+    // Второй пакет — ради заданий, которые проверить машиной нельзя:
+    // «договориться о правилах», «прибраться в комнате». Их подтверждает
+    // родитель, и до сих пор эта очередь только показывалась.
+    const chores = 'ru.mykids.psychology.week01.attention';
     await page.check(`[data-testid="pack-${pack}"]`);
+    await page.check(`[data-testid="pack-${chores}"]`);
     await page.getByTestId('save-packs').click();
     await page.waitForSelector('[data-testid="packs-saved"]');
 
@@ -233,7 +250,8 @@ async function main() {
     // --- задания: ради них всё и затевалось. Ребёнок с нулём кредитов
     // должен иметь возможность их заработать, не прося у родителя.
     await page.waitForSelector(`[data-testid="pack-${pack}"]`);
-    await page.getByRole('button', { name: 'Решать' }).click();
+    // Пакетов теперь два — кнопку берём у нужного, а не первую попавшуюся.
+    await page.getByTestId(`pack-${pack}`).getByRole('button', { name: 'Решать' }).click();
     await page.waitForSelector('[data-testid="task-host"] .stem');
 
     // Отвечаем правильно, подсмотрев ответ в том же файле, который отдаёт
@@ -256,6 +274,30 @@ async function main() {
     await page.waitForSelector('[data-testid="task-note"]');
     const note = await page.getByTestId('task-note').textContent();
     assert.match(note, /Верно\. \+\d+ кредит/, `за верный ответ не начислено: ${note}`);
+
+    // --- задание, которое проверить машиной нельзя
+    //
+    // Отправляем его тем же способом, что и страница ребёнка: токеном
+    // устройства. Дойти до него кликами мешает порядок заданий в пакете —
+    // а проверить здесь надо не порядок, а то, что нажатие «готово» само по
+    // себе не платит и что родителю есть чем это подтвердить.
+    const sent = await postJson(`${base}/child/attempts`, token, {
+      packId: chores, itemId: 'psy-w01-practice-1',
+      answer: { type: 'parent_verified', requested: true },
+    });
+    assert.equal(sent.credits, 0, `за нажатие кнопки начислено ${sent.credits}`);
+    assert.equal(sent.pendingApproval, true, 'задание не встало в очередь к родителю');
+
+    // --- родитель разбирает очередь
+    await page.goto(`${base}/approvals`);
+    await page.waitForSelector('[data-testid="pending-attempt"]');
+    await page.getByTestId('approve-attempt').first().click();
+    await page.waitForSelector('[data-testid="approval-note"]');
+    const approved = await page.getByTestId('approval-note').textContent();
+    assert.match(approved, /Начислено кредитов: 3/, `подтверждение не начислило: ${approved}`);
+    // Очередь должна опустеть сама: список, который не обновляется, толкает
+    // родителя нажать ещё раз.
+    await page.waitForSelector('[data-testid="pending-attempt"]', { state: 'detached' });
 
     assert.deepEqual(errors, [], 'в консоли есть ошибки приложения');
     console.log('admin-ui e2e: все проверки пройдены');

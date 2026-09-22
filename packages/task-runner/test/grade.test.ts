@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskItem } from '@mykids/contracts';
-import { grade, normalizeText, parseNumericAnswer } from '@mykids/task-runner';
+import { earnedCredits, grade, normalizeText, parseNumericAnswer } from '@mykids/task-runner';
 
 describe('parseNumericAnswer', () => {
   it('читает число с единицами и без', () => {
@@ -250,5 +250,39 @@ describe('защита от рассогласования', () => {
   it('ответ не того типа — это ошибка программиста, а не тихий ноль', () => {
     const item: TaskItem = { id: 'nm-001', type: 'numeric', stem: '2+2?', answer: { value: 4 } };
     expect(() => grade(item, { type: 'short_text', raw: '4' })).toThrow(/не подходит/);
+  });
+});
+
+describe('earnedCredits', () => {
+  const numeric: TaskItem = { id: 'nm-001', type: 'numeric', stem: '2+2?', answer: { value: 4 } };
+  const reflection: TaskItem = { id: 'rf-001', type: 'reflection', stem: 'Что понял?' };
+  const verified: TaskItem = {
+    id: 'pv-001', type: 'parent_verified', stem: 'Прибраться в комнате',
+    verificationPrompt: 'Прибрался?',
+  };
+
+  it('частично верный ответ стоит части, но не меньше кредита', () => {
+    expect(earnedCredits(numeric, { score: 1, complete: true }, 10)).toBe(10);
+    expect(earnedCredits(numeric, { score: 0.5, complete: false }, 10)).toBe(5);
+    // Округление вниз дало бы ноль — а это «решил, но не заплатили».
+    expect(earnedCredits(numeric, { score: 0.1, complete: false }, 4)).toBe(1);
+  });
+
+  it('неверный ответ не стоит ничего', () => {
+    expect(earnedCredits(numeric, { score: 0, complete: false }, 10)).toBe(0);
+  });
+
+  it('у типов без правильного ответа платим за выполнение', () => {
+    // score у них означает не верность, а факт: домножать на него нечего.
+    expect(earnedCredits(reflection, { score: 1, complete: true }, 7)).toBe(7);
+    expect(earnedCredits(reflection, { score: 1, complete: false }, 7)).toBe(0);
+  });
+
+  it('задание под подтверждение родителя само по себе не стоит ничего', () => {
+    // grade возвращает ему score 1: задание отправлено. Заплатить за это
+    // сразу значило бы платить за нажатие кнопки — а таких заданий в
+    // пакетах больше половины.
+    const sent = { score: 1, complete: false, pendingApproval: true };
+    expect(earnedCredits(verified, sent, 5)).toBe(0);
   });
 });

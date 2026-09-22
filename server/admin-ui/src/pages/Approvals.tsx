@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
-import { api } from '../api.js';
+import { useState } from 'react';
+import { ApiError, api } from '../api.js';
 import { ErrorBox, Loading, useAsync } from '../components/Async.js';
 
 interface PendingPurchase {
@@ -14,9 +15,34 @@ interface PendingAttempt {
 }
 
 export function ApprovalsPage(): JSX.Element {
-  const { data, error, loading } = useAsync(() => api.approvals());
+  const { data, error, loading, reload } = useAsync(() => api.approvals());
   const purchases = (data?.purchases ?? []) as PendingPurchase[];
   const attempts = (data?.attempts ?? []) as PendingAttempt[];
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function decide(id: string, approve: boolean): Promise<void> {
+    setBusy(id);
+    setNote(null);
+    try {
+      if (!approve) {
+        await api.rejectAttempt(id);
+      } else {
+        const res = await api.approveAttempt(id);
+        // Подтверждение не обходит потолки: если дневной предел уже выбран,
+        // задание остаётся в очереди, и сказать об этом надо прямо — иначе
+        // родитель нажмёт ещё раз и решит, что кнопка не работает.
+        setNote(res.withheldReason ?? [
+          `Начислено кредитов: ${res.credits}`, res.note,
+        ].filter(Boolean).join('. '));
+      }
+    } catch (e) {
+      setNote(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(null);
+      reload();
+    }
+  }
 
   return (
     <>
@@ -58,18 +84,43 @@ export function ApprovalsPage(): JSX.Element {
           ? <p className="note">Очередь пуста.</p>
           : (
             <table>
-              <thead><tr><th>Ребёнок</th><th>Задание</th><th>Когда</th></tr></thead>
+              <thead>
+                <tr><th>Ребёнок</th><th>Задание</th><th>Когда</th><th /></tr>
+              </thead>
               <tbody>
                 {attempts.map((a) => (
-                  <tr key={a.id}>
+                  <tr key={a.id} data-testid="pending-attempt">
                     <td>{a.child.name}</td>
                     <td className="mono">{a.itemId}</td>
                     <td className="note">{new Date(a.createdAt).toLocaleString('ru-RU')}</td>
+                    <td>
+                      <button
+                        disabled={busy !== null}
+                        onClick={() => void decide(a.id, true)}
+                        data-testid="approve-attempt"
+                      >
+                        Подтвердить
+                      </button>
+                      {' '}
+                      <button
+                        className="ghost"
+                        disabled={busy !== null}
+                        onClick={() => void decide(a.id, false)}
+                      >
+                        Отклонить
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+        {note && <p className="note" data-testid="approval-note">{note}</p>}
+        <p className="note" style={{ marginTop: 10 }}>
+          Это задания, которые проверить машиной нельзя: «прибрался в комнате»,
+          «позвонил бабушке». Кредиты за них начисляются в момент подтверждения
+          и проходят те же дневные потолки, что и остальные.
+        </p>
       </div>
     </>
   );

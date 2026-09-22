@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import fastifyStatic from '@fastify/static';
 import type { PrismaClient, Guardian, Device } from '@prisma/client';
 import { AuthError, AuthService } from './services/auth.service.js';
+import { ContentError, ContentService } from './services/content.service.js';
 import { EconomyService, NotFoundError, RuleError } from './services/economy.service.js';
 import { LedgerService } from './services/ledger.service.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
@@ -57,6 +58,12 @@ export interface Services {
    * родитель назначал бы ребёнку пакет, которого нет.
    */
   catalog: () => PackSummary[];
+  /**
+   * Пакеты как содержимое, а не как список: цена задания, потолок пакета и
+   * правильный ответ. Всё это сервер читает сам — присланному вместе с
+   * результатом он больше не верит.
+   */
+  content: ContentService;
 }
 
 declare module 'fastify' {
@@ -130,12 +137,14 @@ function bearer(req: FastifyRequest): string | null {
 }
 
 export function buildApp(prisma: PrismaClient, options: AppOptions = {}): FastifyInstance {
+  const content = new ContentService(options.contentRoot);
   const services: Services = {
     prisma,
     auth: new AuthService(prisma),
-    economy: new EconomyService(prisma),
+    economy: new EconomyService(prisma, content),
     ledger: new LedgerService(prisma),
     catalog: () => readCatalog(options.contentRoot),
+    content,
   };
 
   const app = Fastify({ logger: false });
@@ -168,6 +177,12 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
     }
     if (err instanceof RuleError) {
       return reply.status(409).send({ error: err.code, message: err.message });
+    }
+    // Пакета или задания нет на диске: это не поломка сервера, а неверный
+    // запрос — и ребёнку надо сказать, что именно не нашлось.
+    if (err instanceof ContentError) {
+      return reply.status(err.code === 'no_content' ? 503 : 404)
+        .send({ error: err.code, message: err.message });
     }
     if (err instanceof NotFoundError) {
       return reply.status(404).send({ error: 'not_found', message: err.message });
