@@ -4,6 +4,7 @@ import {
   canPurchase,
   checkPace,
   defaultPaceConfig,
+  defaultRepeatConfig,
   convertCredits,
   dailyGrant,
   evaluateScreen,
@@ -14,6 +15,11 @@ import {
 import type { PrismaClient } from '@prisma/client';
 import { toDomainPolicy } from '../mapping.js';
 import { LedgerService } from './ledger.service.js';
+
+/** Начало окна повторов: отметки старше него на награду уже не влияют. */
+function windowStart(at: Date, days: number): Date {
+  return new Date(at.getTime() - days * 24 * 60 * 60 * 1000);
+}
 
 export class NotFoundError extends Error {}
 export class RuleError extends Error {
@@ -139,13 +145,25 @@ export class EconomyService {
     packDailyCreditCap: number;
     cooldownHours?: number | undefined;
     at: Date;
-  }): Promise<{ credits: number; withheldReason?: string }> {
+  }): Promise<{ credits: number; withheldReason?: string; note?: string }> {
     const policy = await this.policyFor(input.childId);
     const state = await this.dayState(input.childId, input.at, policy);
 
-    const [lastAward, packToday, recentAttempts] = await Promise.all([
-      this.prisma.attempt.findFirst({
-        where: { childId: input.childId, itemId: input.itemId, credits: { gt: 0 } },
+    const [priorAwards, packToday, recentAttempts] = await Promise.all([
+      // Не одна последняя отметка, а все за окно повторов: первая решает,
+      // кончился ли cooldown, остальные — насколько урезать награду за то,
+      // что это же задание уже решали недавно.
+      //
+      // Ограничение по дате здесь — чтобы не тащить всю историю задания за
+      // год; отбрасывает старые отметки всё равно домен, и правило там одно.
+      // Убрав это условие, поведения не изменишь, только запрос растолстеет.
+      this.prisma.attempt.findMany({
+        where: {
+          childId: input.childId,
+          itemId: input.itemId,
+          credits: { gt: 0 },
+          createdAt: { gte: windowStart(input.at, defaultRepeatConfig.windowDays) },
+        },
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true },
       }),
@@ -187,7 +205,7 @@ export class EconomyService {
       state: { creditsEarnedToday: state.creditsEarnedToday },
       packDailyCreditCap: input.packDailyCreditCap,
       packCreditsToday: packToday,
-      lastAwardedAt: lastAward?.createdAt,
+      awardedAt: priorAwards.map((a) => a.createdAt),
       cooldownHours: input.cooldownHours,
       now: input.at,
     });
@@ -221,7 +239,7 @@ export class EconomyService {
         });
       }
     });
-    return { credits: award.credits };
+    return award.note ? { credits: award.credits, note: award.note } : { credits: award.credits };
   }
 
   private async creditsFromPackToday(

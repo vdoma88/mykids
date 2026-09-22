@@ -156,8 +156,10 @@ function Session({ pack, onDone }: { pack: TaskPack; onDone: () => void }): JSX.
       setEarned((c) => c + res.credits);
       // Почему кредитов нет, говорим прямо: «решил, а ничего не дали» без
       // объяснения читается как обман.
+      // Пояснение про повтор идёт вместе с начислением, а не вместо него:
+      // «+5 кредитов» без причины, когда вчера было 10, читается как ошибка.
       setNote(res.withheldReason ?? (res.credits > 0
-        ? `Верно. +${res.credits} кредитов`
+        ? [`Верно. +${res.credits} кредитов`, res.note].filter(Boolean).join(' ')
         : 'Не засчитано'));
       setIndex((i) => i + 1);
     } catch (e) {

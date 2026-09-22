@@ -193,7 +193,7 @@ export const api = {
     packId: string; itemId: string; score: number; baseCredits: number;
     packDailyCreditCap: number; cooldownHours?: number;
   }) =>
-    asDevice<{ credits: number; withheldReason?: string; balances: Balances }>(
+    asDevice<{ credits: number; withheldReason?: string; note?: string; balances: Balances }>(
       '/child/attempts', { method: 'POST', body: JSON.stringify(body) },
     ),
 };

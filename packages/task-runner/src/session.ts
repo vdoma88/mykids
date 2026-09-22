@@ -169,7 +169,10 @@ export class TaskSession {
       state: { creditsEarnedToday: history.creditsEarnedToday + this.creditsThisSession },
       packDailyCreditCap: pack.manifest.reward.dailyCreditCap,
       packCreditsToday: history.packCreditsToday + this.creditsThisSession,
-      lastAwardedAt: history.lastAwardedAt[item.id],
+      // История раннера помнит одну дату на задание — её и передаём списком.
+      // Для cooldown этого достаточно, а затухание за повтор с одной известной
+      // отметкой даёт ровно второй раз, как и на сервере.
+      awardedAt: history.lastAwardedAt[item.id] ? [history.lastAwardedAt[item.id]!] : [],
       cooldownHours: item.cooldownHours ?? pack.manifest.delivery?.cooldownHoursPerItem,
       now,
     });

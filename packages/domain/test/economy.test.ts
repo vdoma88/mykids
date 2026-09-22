@@ -174,17 +174,32 @@ describe('начисление кредитов за задания', () => {
   it('не даёт перерешать задание до истечения cooldown', () => {
     const r = awardTaskCredits({
       ...base,
-      lastAwardedAt: new Date('2026-03-09T10:00:00Z'),
+      awardedAt: [new Date('2026-03-09T10:00:00Z')],
       cooldownHours: 24,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('cooldown_active');
   });
 
-  it('снова засчитывает задание после истечения cooldown', () => {
+  it('снова засчитывает задание после cooldown, но уже дешевле', () => {
+    // Cooldown кончился — решать можно. Но это второе решение за месяц, и
+    // стоит оно вдвое меньше: иначе выгоднее всего было бы раз за разом
+    // решать одни и те же несколько заданий, которые уже знаешь наизусть.
     const r = awardTaskCredits({
       ...base,
-      lastAwardedAt: new Date('2026-03-08T11:00:00Z'),
+      awardedAt: [new Date('2026-03-08T11:00:00Z')],
+      cooldownHours: 24,
+    });
+    expect(r.ok && r.credits).toBe(5);
+    expect(r.ok && r.note).toContain('второй раз');
+  });
+
+  it('задание, не решавшееся месяц, снова стоит полной награды', () => {
+    // Возврат после долгого перерыва — самое полезное повторение из
+    // возможных, и наказывать за него было бы ровно наоборот.
+    const r = awardTaskCredits({
+      ...base,
+      awardedAt: [new Date('2026-01-08T11:00:00Z')],
       cooldownHours: 24,
     });
     expect(r.ok && r.credits).toBe(10);
