@@ -137,6 +137,7 @@ enum LedgerReason {
   conversion_gain
   purchase
   purchase_grant
+  purchase_refund
   screen_usage
   manual_adjust
   tamper_penalty

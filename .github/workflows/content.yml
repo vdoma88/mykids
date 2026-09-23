@@ -141,7 +141,6 @@ jobs:
         run: |
           docker run -d --name mykids --network host \
             -e DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/mykids_image \
-            -e SESSION_SECRET=проверка-образа \
             -e PORT=3000 mykids-server
           for _ in $(seq 1 60); do
             curl -fsS --max-time 2 http://127.0.0.1:3000/health >/dev/null && exit 0

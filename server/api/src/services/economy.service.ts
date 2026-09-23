@@ -297,11 +297,16 @@ export class EconomyService {
     // родитель потерял бы её навсегда, ничего об этом не узнав.
     if (!award.ok) return { credits: 0, withheldReason: award.message };
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.attempt.update({
-        where: { id: attempt.id },
+    // Статус меняется условно — только если попытка всё ещё ждёт. Два
+    // запроса подряд (двойной щелчок, повтор после обрыва сети) иначе оба
+    // прошли бы проверку выше и заплатили дважды: findFirst и update — это
+    // два шага, и между ними успевает второй запрос.
+    const paid = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.attempt.updateMany({
+        where: { id: attempt.id, status: 'pending_approval' },
         data: { status: 'approved', credits: award.credits, decidedAt: at },
       });
+      if (claimed.count === 0) return false;
       if (award.credits > 0) {
         await tx.ledgerEntry.create({
           data: {
@@ -311,7 +316,9 @@ export class EconomyService {
           },
         });
       }
+      return true;
     });
+    if (!paid) throw new NotFoundError('задание не найдено или уже разобрано');
     return award.note ? { credits: award.credits, note: award.note } : { credits: award.credits };
   }
 
@@ -322,9 +329,79 @@ export class EconomyService {
       select: { id: true },
     });
     if (!attempt) throw new NotFoundError('задание не найдено или уже разобрано');
-    await this.prisma.attempt.update({
-      where: { id: attempt.id }, data: { status: 'rejected', decidedAt: at },
+    await this.prisma.attempt.updateMany({
+      where: { id: attempt.id, status: 'pending_approval' },
+      data: { status: 'rejected', decidedAt: at },
     });
+  }
+
+  /**
+   * Родитель одобрил покупку.
+   *
+   * Цена списана ещё в момент покупки — здесь выдаётся только сам эффект.
+   * До этого метода очередь покупок на одобрение была тупиком: кредиты
+   * списывались, а одобрить или отклонить покупку было нечем, и ребёнок
+   * платил за то, чего не получал никогда.
+   */
+  async approvePurchase(purchaseId: string, familyId: string, at: Date): Promise<void> {
+    const purchase = await this.pendingPurchase(purchaseId, familyId);
+    const effect = purchase.storeItem.effect as StoreItem['effect'];
+
+    const done = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.purchase.updateMany({
+        where: { id: purchase.id, status: 'pending' },
+        data: { status: 'approved', decidedAt: at },
+      });
+      if (claimed.count === 0) return false;
+      if (effect.kind === 'grant_minutes') {
+        await tx.ledgerEntry.create({
+          data: {
+            childId: purchase.childId, currency: 'minutes', amount: effect.minutes,
+            reason: 'purchase_grant', refType: 'purchase', refId: purchase.id,
+            deviceId: null, occurredAt: at, seq: 0,
+          },
+        });
+      }
+      return true;
+    });
+    if (!done) throw new NotFoundError('покупка не найдена или уже разобрана');
+  }
+
+  /**
+   * Родитель отклонил покупку: цена возвращается целиком.
+   *
+   * Возврат — отдельной строкой журнала со своей причиной. Стереть списание
+   * нельзя (журнал только дополняется), а «корректировка родителя» через
+   * месяц уже не объяснит, откуда взялись эти кредиты.
+   */
+  async rejectPurchase(purchaseId: string, familyId: string, at: Date): Promise<void> {
+    const purchase = await this.pendingPurchase(purchaseId, familyId);
+
+    const done = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.purchase.updateMany({
+        where: { id: purchase.id, status: 'pending' },
+        data: { status: 'rejected', decidedAt: at },
+      });
+      if (claimed.count === 0) return false;
+      await tx.ledgerEntry.create({
+        data: {
+          childId: purchase.childId, currency: purchase.currency, amount: purchase.cost,
+          reason: 'purchase_refund', refType: 'purchase', refId: purchase.id,
+          deviceId: null, occurredAt: at, seq: 0,
+        },
+      });
+      return true;
+    });
+    if (!done) throw new NotFoundError('покупка не найдена или уже разобрана');
+  }
+
+  private async pendingPurchase(purchaseId: string, familyId: string) {
+    const purchase = await this.prisma.purchase.findFirst({
+      where: { id: purchaseId, status: 'pending', child: { familyId } },
+      include: { storeItem: { select: { effect: true } } },
+    });
+    if (!purchase) throw new NotFoundError('покупка не найдена или уже разобрана');
+    return purchase;
   }
 
   /**

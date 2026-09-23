@@ -89,6 +89,13 @@ async function answerItem(page, item) {
   }
 }
 
+async function getJson(url, token) {
+  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const json = await res.json();
+  if (!res.ok) throw new Error(`${url}: ${res.status} ${JSON.stringify(json)}`);
+  return json;
+}
+
 /** Запрос от имени устройства ребёнка — тем же способом, что и его страница. */
 async function postJson(url, token, body) {
   const res = await fetch(url, {
@@ -152,19 +159,22 @@ async function main() {
 
     // --- родитель: регистрация
     await page.goto(base);
-    await page.getByRole('button', { name: 'Создать семью' }).click();
+    await page.getByRole('tab', { name: 'Новая семья' }).click();
     await page.fill('#familyName', 'Тестовая семья');
     await page.fill('#email', email);
     await page.fill('#password', 'очень-длинный-пароль');
     await page.getByRole('button', { name: 'Создать семью' }).click();
     await page.waitForSelector('text=Дети');
 
-    // --- добавление ребёнка
+    // --- добавление ребёнка. Первого ребёнка страница открывает сразу: у
+    // него ещё нет ни устройства, ни пакетов, и настраивать его всё равно там.
     await page.fill('#childName', 'Марк');
     await page.getByRole('button', { name: 'Добавить' }).click();
-    await page.waitForSelector('text=Марк');
+    await page.waitForURL(/\/children\/[0-9a-f-]{36}$/);
+    await page.waitForSelector('h1:has-text("Марк")');
 
-    await page.click('a:has-text("Марк")');
+    // --- правила — своя вкладка, со своим адресом
+    await page.getByRole('tab', { name: 'Правила' }).click();
     await page.waitForSelector('#lim-1');
 
     // --- симулятор экономики считает доменной функцией
@@ -176,18 +186,21 @@ async function main() {
     await page.fill('#lim-1', '45');
     await page.getByRole('button', { name: 'Сохранить политику' }).click();
     await page.waitForSelector('text=Политика сохранена');
+    // Перезагрузка возвращает на ту же вкладку: адрес её помнит.
     await page.reload();
     await page.waitForSelector('#lim-1');
     assert.equal(await page.inputValue('#lim-1'), '45', 'лимит не сохранился');
 
     // --- корректировка требует причины и попадает в журнал
+    await page.getByRole('tab', { name: /^Обзор/ }).click();
     await page.fill('#adj-amt', '100');
     await page.fill('#adj-note', 'стартовые кредиты');
     await page.getByRole('button', { name: 'Записать' }).click();
     await page.waitForSelector('text=корректировка родителя');
-    assert.equal(await page.getByTestId('bal-credits').textContent(), '100');
+    await expectBalance(page, 'bal-credits', '100');
 
     // --- токен устройства показывается один раз
+    await page.getByRole('tab', { name: 'Устройства' }).click();
     await page.getByRole('button', { name: 'Выдать токен' }).click();
     const token = (await page.getByTestId('device-token').textContent()).trim();
     assert.ok(token.length > 20, 'токен устройства не выдан');
@@ -199,6 +212,7 @@ async function main() {
     // «договориться о правилах», «прибраться в комнате». Их подтверждает
     // родитель, и до сих пор эта очередь только показывалась.
     const chores = 'ru.mykids.psychology.week01.attention';
+    await page.getByRole('tab', { name: 'Задания' }).click();
     await page.check(`[data-testid="pack-${pack}"]`);
     await page.check(`[data-testid="pack-${chores}"]`);
     await page.getByTestId('save-packs').click();
@@ -209,7 +223,7 @@ async function main() {
     await page.fill('#st-title', '+30 минут');
     await page.fill('#st-cost', '60');
     await page.getByRole('button', { name: 'Добавить' }).click();
-    await page.waitForSelector('td:has-text("+30 минут")');
+    await page.waitForSelector('[data-testid="store-items"] >> text=+30 минут');
 
     // --- ребёнок на своём устройстве
     await page.goto(`${base}/child`);
@@ -219,9 +233,11 @@ async function main() {
 
     await expectBalance(page, 'child-credits', '100');
     // Правила показываются ребёнку намеренно
+    await page.getByRole('tab', { name: 'Правила' }).click();
     await page.waitForSelector('text=Курс обмена');
 
     // --- обмен кредитов на минуты
+    await page.getByRole('tab', { name: 'Магазин' }).click();
     await page.fill('#conv', '10');
     await page.getByRole('button', { name: 'Обменять' }).click();
     await page.waitForSelector('text=Получено 10 минут');
@@ -245,7 +261,13 @@ async function main() {
     // --- а когда кредитов нет совсем, сервер отказывает
     await page.fill('#conv', '5');
     await page.getByRole('button', { name: 'Обменять' }).click();
-    await page.waitForSelector('.err');
+    await page.waitForSelector('[role="alert"]');
+
+    // --- раздел ребёнка переживает перезагрузку. Раньше всё глубже /child/
+    // сервер считал запросами к API, и обновлённая страница отвечала 401.
+    await page.reload();
+    await page.waitForSelector('#conv');
+    await page.getByRole('tab', { name: 'Задания' }).click();
 
     // --- задания: ради них всё и затевалось. Ребёнок с нулём кредитов
     // должен иметь возможность их заработать, не прося у родителя.
@@ -274,6 +296,10 @@ async function main() {
     await page.waitForSelector('[data-testid="task-note"]');
     const note = await page.getByTestId('task-note').textContent();
     assert.match(note, /Верно\. \+\d+ кредит/, `за верный ответ не начислено: ${note}`);
+    // Результат остаётся на экране с тем заданием, к которому относится;
+    // дальше ребёнок идёт сам.
+    await page.getByTestId('task-next').click();
+    await page.waitForSelector('[data-testid="task-note"]', { state: 'detached' });
 
     // --- задание, которое проверить машиной нельзя
     //
@@ -298,6 +324,31 @@ async function main() {
     // Очередь должна опустеть сама: список, который не обновляется, толкает
     // родителя нажать ещё раз.
     await page.waitForSelector('[data-testid="pending-attempt"]', { state: 'detached' });
+
+    // --- покупка на одобрение, которую родитель отклоняет. Раньше такая
+    // покупка списывала цену и висела в очереди навсегда: ни одобрить, ни
+    // вернуть кредиты было нечем.
+    await page.goto(`${base}/store`);
+    await page.fill('#st-title', 'Поход в кино');
+    await page.fill('#st-cost', '4');
+    await page.getByRole('switch', { name: /Нужно моё одобрение/ }).click();
+    await page.getByRole('button', { name: 'Добавить' }).click();
+    await page.waitForSelector('[data-testid="store-items"] >> text=Поход в кино');
+
+    const shelf = await getJson(`${base}/child/store`, token);
+    const movie = shelf.find((i) => i.title === 'Поход в кино');
+    const before = (await getJson(`${base}/child/me`, token)).balances.credits;
+    await postJson(`${base}/child/purchases`, token, { storeItemId: movie.id });
+    assert.equal((await getJson(`${base}/child/me`, token)).balances.credits, before - 4,
+      'цена покупки на одобрение не списалась сразу');
+
+    await page.goto(`${base}/approvals`);
+    await page.waitForSelector('[data-testid="pending-purchase"]');
+    await page.getByTestId('pending-purchase').getByRole('button', { name: 'Отклонить' }).click();
+    await page.waitForSelector('text=возвращено');
+    await page.waitForSelector('[data-testid="pending-purchase"]', { state: 'detached' });
+    assert.equal((await getJson(`${base}/child/me`, token)).balances.credits, before,
+      'после отказа кредиты не вернулись');
 
     assert.deepEqual(errors, [], 'в консоли есть ошибки приложения');
     console.log('admin-ui e2e: все проверки пройдены');

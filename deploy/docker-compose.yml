@@ -36,7 +36,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-mykids}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-mykids}
-      SESSION_SECRET: ${SESSION_SECRET:?задайте секрет в deploy/.env}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
       PORT: 3000
     ports:
       - "${API_PORT:-3000}:3000"

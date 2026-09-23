@@ -1,127 +1,146 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
-import { ApiError, api } from '../api.js';
-import { ErrorBox, Loading, useAsync } from '../components/Async.js';
+import { api, type Me, type PendingAttempt, type PendingPurchase } from '../api.js';
+import { APPROVALS_CHANGED } from '../layout/Shell.js';
+import { credits, dateTime, minutes } from '../lib/format.js';
+import { describeEffect } from '../lib/labels.js';
+import { CardSkeleton, ErrorBox, errorText, useAsync } from '../ui/Async.js';
+import { Icon } from '../ui/Icon.js';
+import { Alert, Avatar, Card, Empty, PageHead } from '../ui/kit.js';
+import { useToast } from '../ui/Toast.js';
 
-interface PendingPurchase {
-  id: string; cost: number; currency: string; createdAt: string;
-  storeItem: { title: string };
-  child: { id: string; name: string };
+function Actions({ busy, onApprove, onReject, readOnly, approveLabel, testId }: {
+  busy: boolean; onApprove: () => void; onReject: () => void; readOnly: boolean; approveLabel: string; testId: string;
+}): JSX.Element | null {
+  if (readOnly) return null;
+  return (
+    <div className="row nowrap" style={{ ['--gap' as string]: '8px' }}>
+      <button type="button" className="btn ghost sm" disabled={busy} onClick={onReject}>Отклонить</button>
+      <button type="button" className="btn success sm" disabled={busy} onClick={onApprove} data-testid={testId}>
+        <Icon name="check" size={16} />{approveLabel}
+      </button>
+    </div>
+  );
 }
 
-interface PendingAttempt {
-  id: string; itemId: string; packId: string; createdAt: string;
-  child: { id: string; name: string };
-}
-
-export function ApprovalsPage(): JSX.Element {
+export function ApprovalsPage({ me }: { me: Me }): JSX.Element {
   const { data, error, loading, reload } = useAsync(() => api.approvals());
-  const purchases = (data?.purchases ?? []) as PendingPurchase[];
-  const attempts = (data?.attempts ?? []) as PendingAttempt[];
   const [busy, setBusy] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
+  const toast = useToast();
+  const readOnly = me.role === 'viewer';
 
-  async function decide(id: string, approve: boolean): Promise<void> {
+  async function run(id: string, fn: () => Promise<string | { tone: 'success' | 'warning'; text: string }>): Promise<void> {
     setBusy(id);
     setNote(null);
     try {
-      if (!approve) {
-        await api.rejectAttempt(id);
-      } else {
-        const res = await api.approveAttempt(id);
-        // Подтверждение не обходит потолки: если дневной предел уже выбран,
-        // задание остаётся в очереди, и сказать об этом надо прямо — иначе
-        // родитель нажмёт ещё раз и решит, что кнопка не работает.
-        setNote(res.withheldReason ?? [
-          `Начислено кредитов: ${res.credits}`, res.note,
-        ].filter(Boolean).join('. '));
-      }
+      const r = await fn();
+      if (typeof r === 'string') toast.success(r); else setNote(r);
     } catch (e) {
-      setNote(e instanceof ApiError ? e.message : String(e));
+      toast.error(errorText(e));
     } finally {
       setBusy(null);
       reload();
+      window.dispatchEvent(new Event(APPROVALS_CHANGED));
     }
   }
 
+  const approveAttempt = (a: PendingAttempt): Promise<void> => run(a.id, async () => {
+    const res = await api.approveAttempt(a.id);
+    // Подтверждение не обходит потолки: если дневной предел уже выбран,
+    // задание остаётся в очереди — и сказать об этом надо прямо, иначе
+    // родитель нажмёт ещё раз и решит, что кнопка не работает.
+    return res.withheldReason
+      ? { tone: 'warning', text: `${res.withheldReason} Задание осталось в очереди — подтвердите его завтра.` }
+      : { tone: 'success', text: [`Начислено кредитов: ${res.credits}`, res.note].filter(Boolean).join('. ') };
+  });
+
+  const purchases = data?.purchases ?? [];
+  const attempts = data?.attempts ?? [];
+  const total = purchases.length + attempts.length;
+
   return (
     <>
-      <h2>Одобрения</h2>
-      <p className="sub">
-        Покупки и задания, которые ждут вашего подтверждения.
-      </p>
+      <PageHead
+        title="Одобрения"
+        lead="То, что ждёт вашего решения: задания, которые машиной не проверить, и покупки с одобрением."
+      />
       <ErrorBox message={error} />
-      {loading && <Loading />}
+      {note && (
+        <div data-testid="approval-note">
+          <Alert tone={note.tone}>{note.text}</Alert>
+        </div>
+      )}
+      {loading && <CardSkeleton lines={3} />}
 
-      <div className="card">
-        <h3>Покупки</h3>
-        {purchases.length === 0
-          ? <p className="note">Очередь пуста.</p>
-          : (
-            <table>
-              <thead><tr><th>Ребёнок</th><th>Товар</th><th>Цена</th><th>Когда</th></tr></thead>
-              <tbody>
-                {purchases.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.child.name}</td>
-                    <td>{p.storeItem.title}</td>
-                    <td>{p.cost} {p.currency === 'credits' ? 'кр.' : 'мин.'}</td>
-                    <td className="note">{new Date(p.createdAt).toLocaleString('ru-RU')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        <p className="note" style={{ marginTop: 10 }}>
-          Цена списывается в момент покупки, даже пока она ждёт одобрения: иначе
-          те же кредиты можно потратить дважды.
-        </p>
-      </div>
+      {data && total === 0 && (
+        <Card><Empty icon="inbox" title="Всё разобрано">Когда ребёнок отправит задание или покупку на одобрение, они появятся здесь.</Empty></Card>
+      )}
 
-      <div className="card">
-        <h3>Задания с подтверждением</h3>
-        {attempts.length === 0
-          ? <p className="note">Очередь пуста.</p>
-          : (
-            <table>
-              <thead>
-                <tr><th>Ребёнок</th><th>Задание</th><th>Когда</th><th /></tr>
-              </thead>
-              <tbody>
-                {attempts.map((a) => (
-                  <tr key={a.id} data-testid="pending-attempt">
-                    <td>{a.child.name}</td>
-                    <td className="mono">{a.itemId}</td>
-                    <td className="note">{new Date(a.createdAt).toLocaleString('ru-RU')}</td>
-                    <td>
-                      <button
-                        disabled={busy !== null}
-                        onClick={() => void decide(a.id, true)}
-                        data-testid="approve-attempt"
-                      >
-                        Подтвердить
-                      </button>
-                      {' '}
-                      <button
-                        className="ghost"
-                        disabled={busy !== null}
-                        onClick={() => void decide(a.id, false)}
-                      >
-                        Отклонить
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        {note && <p className="note" data-testid="approval-note">{note}</p>}
-        <p className="note" style={{ marginTop: 10 }}>
-          Это задания, которые проверить машиной нельзя: «прибрался в комнате»,
-          «позвонил бабушке». Кредиты за них начисляются в момент подтверждения
-          и проходят те же дневные потолки, что и остальные.
-        </p>
-      </div>
+      {attempts.length > 0 && (
+        <Card
+          title={`Задания · ${attempts.length}`}
+          desc="Кредиты начисляются в момент подтверждения, по цене из пакета и сегодняшним потолкам."
+        >
+          <div className="list">
+            {attempts.map((a) => (
+              <div className="list-item" key={a.id} data-testid="pending-attempt">
+                <Avatar name={a.child.name} />
+                <div className="grow">
+                  <div className="title">{a.stem ?? a.itemId}</div>
+                  <div className="meta">{a.child.name} · {a.packTitle ?? a.packId} · {dateTime(a.createdAt)}</div>
+                </div>
+                <Actions
+                  readOnly={readOnly}
+                  busy={busy !== null}
+                  approveLabel="Подтвердить"
+                  testId="approve-attempt"
+                  onApprove={() => void approveAttempt(a)}
+                  onReject={() => void run(a.id, async () => {
+                    await api.rejectAttempt(a.id);
+                    return 'Задание отклонено.';
+                  })}
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {purchases.length > 0 && (
+        <Card
+          title={`Покупки · ${purchases.length}`}
+          desc="Цена уже списана — иначе те же кредиты можно потратить дважды, пока вы думаете. Отклонив покупку, вы вернёте её целиком."
+        >
+          <div className="list">
+            {purchases.map((p: PendingPurchase) => (
+              <div className="list-item" key={p.id} data-testid="pending-purchase">
+                <Avatar name={p.child.name} />
+                <div className="grow">
+                  <div className="title">{p.storeItem.title}</div>
+                  <div className="meta">
+                    {p.child.name} · {describeEffect(p.storeItem.effect)} · {p.currency === 'credits' ? credits(p.cost) : minutes(p.cost)} · {dateTime(p.createdAt)}
+                  </div>
+                </div>
+                <Actions
+                  readOnly={readOnly}
+                  busy={busy !== null}
+                  approveLabel="Одобрить"
+                  testId="approve-purchase"
+                  onApprove={() => void run(p.id, async () => {
+                    await api.approvePurchase(p.id);
+                    return `Покупка «${p.storeItem.title}» одобрена.`;
+                  })}
+                  onReject={() => void run(p.id, async () => {
+                    await api.rejectPurchase(p.id);
+                    return `Покупка отклонена, ${p.currency === 'credits' ? credits(p.cost) : minutes(p.cost)} возвращено.`;
+                  })}
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </>
   );
 }
