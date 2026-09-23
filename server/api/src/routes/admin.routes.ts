@@ -16,12 +16,19 @@ function assertCanEdit(role: string): void {
   if (role === 'viewer') throw new HttpError(403, 'forbidden', 'Только для чтения.');
 }
 
+/** Что агент не считает и не закрывает никогда: рабочий стол и сам агент. */
+const DEFAULT_ALWAYS_ALLOWED = ['explorer.exe', 'mykids-agent.exe'];
+
 const policyBody = z.object({
   timezone: z.string().min(1),
   dailyLimitMinutes: z.array(z.number().int().nonnegative()).length(7),
   carryOverMaxMinutes: z.number().int().nonnegative(),
   windows: z.array(timeWindowSchema),
-  alwaysAllowed: z.array(z.string()).default([]),
+  // Необязательно намеренно: админка его не редактирует и не присылает. С
+  // default([]) каждое сохранение правил стирало список, который сервер сам
+  // завёл при создании ребёнка, — и Проводник переставал быть «всегда
+  // разрешён» после первой же правки лимитов.
+  alwaysAllowed: z.array(z.string()).optional(),
   economy: z.object({
     creditsPerMinute: z.number().int().positive(),
     maxConvertedMinutesPerDay: z.number().int().nonnegative(),
@@ -52,6 +59,27 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
     })));
   });
 
+  /**
+   * Один ребёнок. Странице ребёнка нужно его имя: без него заголовок гласил
+   * просто «Ребёнок», и с двумя детьми было не понять, чьи правила правишь.
+   */
+  app.get('/admin/children/:childId', async (req) => {
+    const { childId } = z.object({ childId: z.string().uuid() }).parse(req.params);
+    await assertOwnChild(s, req.guardian!.familyId, childId);
+    const c = await s.prisma.child.findUniqueOrThrow({
+      where: { id: childId },
+      include: { devices: { where: { revokedAt: null }, orderBy: { createdAt: 'asc' } } },
+    });
+    return {
+      id: c.id, name: c.name, birthYear: c.birthYear,
+      balances: await s.ledger.balances(c.id),
+      devices: c.devices.map((d) => ({
+        id: d.id, platform: d.platform, name: d.name,
+        lastSeenAt: d.lastSeenAt, agentVersion: d.agentVersion,
+      })),
+    };
+  });
+
   app.post('/admin/children', async (req, reply) => {
     assertCanEdit(req.guardian!.role);
     const body = z.object({
@@ -68,7 +96,7 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
       data: {
         childId: child.id,
         dailyLimitMinutes: [120, 60, 60, 60, 60, 90, 120],
-        alwaysAllowed: ['explorer.exe', 'mykids-agent.exe'],
+        alwaysAllowed: DEFAULT_ALWAYS_ALLOWED,
       },
     });
     return reply.status(201).send({ id: child.id });
@@ -143,14 +171,16 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
         childId, timezone: body.timezone,
         dailyLimitMinutes: body.dailyLimitMinutes,
         carryOverMaxMinutes: body.carryOverMaxMinutes,
-        windows: body.windows as never, alwaysAllowed: body.alwaysAllowed,
+        windows: body.windows as never,
+        alwaysAllowed: body.alwaysAllowed ?? DEFAULT_ALWAYS_ALLOWED,
         ...body.economy,
       },
       update: {
         timezone: body.timezone,
         dailyLimitMinutes: body.dailyLimitMinutes,
         carryOverMaxMinutes: body.carryOverMaxMinutes,
-        windows: body.windows as never, alwaysAllowed: body.alwaysAllowed,
+        windows: body.windows as never,
+        ...(body.alwaysAllowed === undefined ? {} : { alwaysAllowed: body.alwaysAllowed }),
         ...body.economy,
       },
     });
@@ -279,6 +309,26 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
     return reply.status(201).send({ id: created.id });
   });
 
+  /**
+   * Включить или выключить товар.
+   *
+   * Удалять нельзя: на товар ссылаются прошлые покупки, и журнал должен их
+   * объяснять. Выключенный товар пропадает из магазина ребёнка, но остаётся в
+   * истории. До этого маршрута ошибочно заведённый товар висел у ребёнка
+   * навсегда.
+   */
+  app.patch('/admin/store/:id', async (req) => {
+    assertCanEdit(req.guardian!.role);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = z.object({ enabled: z.boolean() }).parse(req.body);
+    const updated = await s.prisma.storeItem.updateMany({
+      where: { id, familyId: req.guardian!.familyId },
+      data: { enabled: body.enabled },
+    });
+    if (updated.count === 0) throw new HttpError(404, 'not_found', 'Товар не найден.');
+    return { id, enabled: body.enabled };
+  });
+
   /** Очередь покупок и заданий, ждущих подтверждения родителя. */
   app.get('/admin/approvals', async (req) => {
     const familyId = req.guardian!.familyId;
@@ -286,13 +336,25 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
       s.prisma.purchase.findMany({
         where: { status: 'pending', child: { familyId } },
         include: { storeItem: true, child: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
       }),
       s.prisma.attempt.findMany({
         where: { status: 'pending_approval', child: { familyId } },
         include: { child: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
       }),
     ]);
-    return { purchases, attempts };
+    // Родителю показываем текст задания и название пакета, а не
+    // «psy-w01-practice-1»: подтверждать надо то, что он может узнать.
+    const titles = new Map(s.catalog().map((p) => [p.id, p.title]));
+    return {
+      purchases,
+      attempts: attempts.map((a) => {
+        let stem: string | null = null;
+        try { stem = s.content.terms(a.packId, a.itemId).item.stem; } catch { /* пакет убрали */ }
+        return { ...a, stem, packTitle: titles.get(a.packId) ?? null };
+      }),
+    };
   });
 
   /**
@@ -302,13 +364,31 @@ export function registerAdminRoutes(app: FastifyInstance, s: Services): void {
    * условие, которое сервер проверить не мог, а не правила экономики.
    */
   app.post('/admin/attempts/:id/approve', async (req) => {
+    assertCanEdit(req.guardian!.role);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     return s.economy.approveAttempt(id, req.guardian!.familyId, new Date());
   });
 
   app.post('/admin/attempts/:id/reject', async (req, reply) => {
+    assertCanEdit(req.guardian!.role);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     await s.economy.rejectAttempt(id, req.guardian!.familyId, new Date());
+    return reply.status(204).send();
+  });
+
+  /** Одобрить покупку: цена уже списана, выдаётся эффект. */
+  app.post('/admin/purchases/:id/approve', async (req, reply) => {
+    assertCanEdit(req.guardian!.role);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    await s.economy.approvePurchase(id, req.guardian!.familyId, new Date());
+    return reply.status(204).send();
+  });
+
+  /** Отклонить покупку: цена возвращается ребёнку отдельной строкой журнала. */
+  app.post('/admin/purchases/:id/reject', async (req, reply) => {
+    assertCanEdit(req.guardian!.role);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    await s.economy.rejectPurchase(id, req.guardian!.familyId, new Date());
     return reply.status(204).send();
   });
 }

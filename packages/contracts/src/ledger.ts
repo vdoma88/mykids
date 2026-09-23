@@ -20,6 +20,7 @@ export const ledgerReasonSchema = z.enum([
   'conversion_gain',  // зачисление минут при обмене
   'purchase',        // трата в магазине
   'purchase_grant',  // эффект покупки, начисляющий минуты
+  'purchase_refund', // возврат цены покупки, которую родитель отклонил
   'screen_usage',    // списание минут за использование экрана
   'manual_adjust',   // ручная корректировка родителем
   'tamper_penalty',  // штраф за вмешательство в работу агента

@@ -44,7 +44,14 @@ async function request<T>(path: string, init: RequestInit & { token?: string | n
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
-  const data: unknown = text ? JSON.parse(text) : null;
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Вместо JSON пришла страница — обычно это прокси или сервер, который
+    // ещё поднимается. Сырое «Unexpected token <» человеку ничего не скажет.
+    throw new ApiError(res.status, 'bad_response', `Сервер ответил не так, как ожидалось (код ${res.status}).`);
+  }
   if (!res.ok) {
     const err = data as { error?: string; message?: string } | null;
     throw new ApiError(res.status, err?.error ?? 'unknown', err?.message ?? 'Ошибка запроса.');
@@ -96,6 +103,29 @@ export interface ChildMe {
   name: string; balances: Balances; policy: Policy; screen: ScreenState;
 }
 
+export interface Device {
+  id: string; platform: string; name: string; lastSeenAt: string | null; agentVersion: string | null;
+}
+
+export interface ChildDetail {
+  id: string; name: string; birthYear: number | null; balances: Balances; devices: Device[];
+}
+
+export type ShopItem = StoreItem & { costCurrency: 'credits' | 'minutes'; costAmount: number; enabled: boolean };
+
+export interface PendingPurchase {
+  id: string; cost: number; currency: 'credits' | 'minutes'; createdAt: string;
+  storeItem: { title: string; effect: unknown };
+  child: { id: string; name: string };
+}
+
+export interface PendingAttempt {
+  id: string; itemId: string; packId: string; createdAt: string;
+  /** Текст задания и название пакета — сервер подставляет их из каталога. */
+  stem: string | null; packTitle: string | null;
+  child: { id: string; name: string };
+}
+
 // ------------------------------------------------------------------- вызовы
 
 /** Пакет заданий в каталоге сервера. */
@@ -123,6 +153,7 @@ export const api = {
   logout: () => asParent<void>('/auth/logout', { method: 'POST' }),
 
   children: () => asParent<ChildSummary[]>('/admin/children'),
+  child: (childId: string) => asParent<ChildDetail>(`/admin/children/${childId}`),
   addChild: (body: { name: string; birthYear?: number }) =>
     asParent<{ id: string }>('/admin/children', { method: 'POST', body: JSON.stringify(body) }),
 
@@ -161,15 +192,30 @@ export const api = {
   revokeDevice: (deviceId: string) =>
     asParent<void>(`/admin/devices/${deviceId}`, { method: 'DELETE' }),
 
-  store: () => asParent<(StoreItem & { costCurrency: string; costAmount: number })[]>('/admin/store'),
+  store: () => asParent<ShopItem[]>('/admin/store'),
   addStoreItem: (body: unknown) =>
     asParent<{ id: string }>('/admin/store', { method: 'POST', body: JSON.stringify(body) }),
+  setStoreItemEnabled: (id: string, enabled: boolean) =>
+    asParent<{ id: string; enabled: boolean }>(`/admin/store/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ enabled }),
+    }),
 
-  approvals: () => asParent<{ purchases: unknown[]; attempts: unknown[] }>('/admin/approvals'),
+  approvals: () => asParent<{ purchases: PendingPurchase[]; attempts: PendingAttempt[] }>('/admin/approvals'),
+  approvePurchase: (id: string) => asParent<void>(`/admin/purchases/${id}/approve`, { method: 'POST' }),
+  rejectPurchase: (id: string) => asParent<void>(`/admin/purchases/${id}/reject`, { method: 'POST' }),
+
+  // ---- аккаунт родителя
+  totpBegin: () => asParent<{ secret: string; uri: string }>('/auth/totp/begin', { method: 'POST' }),
+  totpConfirm: (secret: string, code: string) =>
+    asParent<void>('/auth/totp/confirm', { method: 'POST', body: JSON.stringify({ secret, code }) }),
+  totpDisable: (password: string) =>
+    asParent<void>('/auth/totp/disable', { method: 'POST', body: JSON.stringify({ password }) }),
+  addGuardian: (body: { email: string; password: string; role: 'parent' | 'viewer' }) =>
+    asParent<{ guardianId: string }>('/auth/guardians', { method: 'POST', body: JSON.stringify(body) }),
 
   // ---- ребёнок, по токену устройства
   childMe: () => asDevice<ChildMe>('/child/me'),
-  childStore: () => asDevice<(StoreItem & { costCurrency: string; costAmount: number })[]>('/child/store'),
+  childStore: () => asDevice<ShopItem[]>('/child/store'),
   childConvert: (minutes: number) =>
     asDevice<{ minutes: number; creditsSpent: number; balances: Balances }>('/child/convert', {
       method: 'POST', body: JSON.stringify({ minutes }),

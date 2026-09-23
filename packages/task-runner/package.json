@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./grade": "./src/grade.ts",
-    "./answer": "./src/answer.ts"
+    "./answer": "./src/answer.ts",
+    "./runner.css": "./src/ui/runner.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

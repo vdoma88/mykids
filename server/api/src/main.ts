@@ -15,7 +15,13 @@ const webRoot = process.env['MYKIDS_WEB_ROOT']
 const contentRoot = process.env['MYKIDS_CONTENT_ROOT']
   ?? fileURLToPath(new URL('../../../content/packs', import.meta.url));
 
-const app = buildApp(db(), { webRoot, contentRoot });
+// Журнал нужен рабочему серверу: без него на пятисотую не видно причины.
+// warn — чтобы не писать строку на каждый запрос агента раз в минуту.
+const levels = ['fatal', 'error', 'warn', 'info', 'debug'] as const;
+const wanted = process.env['LOG_LEVEL'];
+const logLevel = levels.find((l) => l === wanted) ?? 'warn';
+
+const app = buildApp(db(), { webRoot, contentRoot, logLevel });
 
 const shutdown = async (): Promise<void> => {
   await app.close();

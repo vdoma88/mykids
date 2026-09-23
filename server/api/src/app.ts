@@ -35,6 +35,12 @@ export interface AppOptions {
    * за «/child/packs».
    */
   contentRoot?: string | undefined;
+  /**
+   * Уровень журнала сервера. По умолчанию журнал выключен — так тихо идут
+   * тесты. Рабочий сервер включает его: иначе на «Внутренняя ошибка сервера»
+   * в журнале не оставалось ничего, и искать причину было негде.
+   */
+  logLevel?: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | undefined;
 }
 
 /** Пакет в каталоге — то, что видно родителю при назначении. */
@@ -147,7 +153,7 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
     content,
   };
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: options.logLevel ? { level: options.logLevel } : false });
 
   /** Требует сессию родителя. */
   app.decorate('requireGuardian', async (req: FastifyRequest) => {
@@ -167,7 +173,7 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
 
   // Ошибки домена и аутентификации отдаются кодами, а не текстом: клиенту
   // нужно отличать «мало кредитов» от «дневной лимит исчерпан».
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     if (err instanceof HttpError) {
       return reply.status(err.status).send({ error: err.code, message: err.message });
     }
@@ -188,11 +194,28 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
       return reply.status(404).send({ error: 'not_found', message: err.message });
     }
     // zod и встроенная валидация Fastify приходят разными формами
-    const asRecord = err as { validation?: unknown; statusCode?: number; name?: string; message?: string };
-    if (asRecord.validation || asRecord.statusCode === 400 || asRecord.name === 'ZodError') {
+    const asRecord = err as {
+      validation?: unknown; statusCode?: number; name?: string; message?: string;
+      issues?: { path: (string | number)[]; message: string }[];
+    };
+    if (asRecord.name === 'ZodError' && asRecord.issues?.length) {
+      // Раньше наружу уходил весь JSON с разбором zod — родитель видел дамп
+      // вместо фразы. Теперь — какое поле и что с ним; полный разбор остаётся
+      // в поле issues для того, кто пишет клиент.
+      const first = asRecord.issues[0]!;
+      const where = first.path.length ? ` в поле «${first.path.join('.')}»` : '';
+      return reply.status(400).send({
+        error: 'bad_request',
+        message: `Некорректные данные${where}: ${first.message}`,
+        issues: asRecord.issues,
+      });
+    }
+    if (asRecord.validation || asRecord.statusCode === 400) {
       return reply.status(400).send({ error: 'bad_request', message: asRecord.message ?? 'Некорректный запрос.' });
     }
-    app.log.error(err);
+    // Причину пишем в журнал целиком, а наружу — только общую фразу: стек и
+    // текст ошибки базы ребёнку и постороннему видеть незачем.
+    req.log.error({ err, url: req.url, method: req.method }, 'необработанная ошибка');
     return reply.status(500).send({ error: 'internal', message: 'Внутренняя ошибка сервера.' });
   });
 

@@ -1,0 +1,120 @@
+/*
+ * Токены оформления. Все цвета, отступы и скругления — отсюда; в компонентах
+ * только переменные. Тёмная тема — переопределение этих же переменных.
+ *
+ * Шрифты системные намеренно: сервер стоит дома и может жить без интернета,
+ * а страница, которая ждёт шрифт с чужого сервера, в таком доме рисуется
+ * пустыми прямоугольниками.
+ */
+:root {
+  color-scheme: light;
+
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --bg: #F6F5F2;
+  --surface: #FFFFFF;
+  --surface-2: #F3F1EC;
+  --surface-3: #EAE7E0;
+  --text: #1E1C24;
+  --text-muted: #625E6B;
+  --text-subtle: #8A8693;
+  --border: #E5E1D9;
+  --border-strong: #CFCAC0;
+
+  --accent: #5847D6;
+  --accent-hover: #4A39C2;
+  --accent-soft: #EFECFF;
+  --accent-text: #4131B5;
+  --accent-contrast: #FFFFFF;
+  --accent-ring: rgba(88, 71, 214, .22);
+
+  --success: #1D7F53;
+  --success-soft: #E3F3EA;
+  --danger: #C23F35;
+  --danger-soft: #FCE8E6;
+  --warning: #A86B12;
+  --warning-soft: #FCF0DA;
+
+  --nav-bg: #1F1A36;
+  --nav-text: #CFC9EA;
+  --nav-text-strong: #FFFFFF;
+  --nav-hover: rgba(255, 255, 255, .07);
+  --nav-active: rgba(255, 255, 255, .13);
+
+  --shadow-sm: 0 1px 2px rgba(24, 20, 40, .05);
+  --shadow-md: 0 1px 2px rgba(24, 20, 40, .04), 0 6px 20px -8px rgba(24, 20, 40, .16);
+  --shadow-lg: 0 20px 50px -18px rgba(24, 20, 40, .35);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+  --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+
+  --sidebar-w: 248px;
+  --content-max: 1080px;
+  --ease: cubic-bezier(.2, .7, .3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121118;
+    --surface: #1B1A22;
+    --surface-2: #23212C;
+    --surface-3: #2D2B38;
+    --text: #EDEBF3;
+    --text-muted: #A7A3B3;
+    --text-subtle: #7F7B8C;
+    --border: #2E2C38;
+    --border-strong: #423F4F;
+    --accent: #8F82FF;
+    --accent-hover: #A398FF;
+    --accent-soft: #28244A;
+    --accent-text: #BDB4FF;
+    --accent-contrast: #14121F;
+    --accent-ring: rgba(143, 130, 255, .3);
+    --success: #4FC48C;
+    --success-soft: #14301F;
+    --danger: #F07C71;
+    --danger-soft: #3A1B19;
+    --warning: #E6AB52;
+    --warning-soft: #372911;
+    --nav-bg: #16141D;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -10px rgba(0, 0, 0, .6);
+    --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .8);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121118;
+  --surface: #1B1A22;
+  --surface-2: #23212C;
+  --surface-3: #2D2B38;
+  --text: #EDEBF3;
+  --text-muted: #A7A3B3;
+  --text-subtle: #7F7B8C;
+  --border: #2E2C38;
+  --border-strong: #423F4F;
+  --accent: #8F82FF;
+  --accent-hover: #A398FF;
+  --accent-soft: #28244A;
+  --accent-text: #BDB4FF;
+  --accent-contrast: #14121F;
+  --accent-ring: rgba(143, 130, 255, .3);
+  --success: #4FC48C;
+  --success-soft: #14301F;
+  --danger: #F07C71;
+  --danger-soft: #3A1B19;
+  --warning: #E6AB52;
+  --warning-soft: #372911;
+  --nav-bg: #16141D;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -10px rgba(0, 0, 0, .6);
+  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .8);
+}

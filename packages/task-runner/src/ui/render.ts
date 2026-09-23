@@ -63,8 +63,11 @@ export function renderItem(host: HTMLElement, item: TaskItem): RenderedItem {
 
     case 'numeric':
     case 'short_text': {
-      const unit = item.type === 'numeric' && item.answer.unit ? ` <span class="unit">${esc(item.answer.unit)}</span>` : '';
-      body(`<input class="answer-input" type="text" autocomplete="off" placeholder="Ответ"/>${unit}`);
+      const unit = item.type === 'numeric' && item.answer.unit ? `<span class="unit">${esc(item.answer.unit)}</span>` : '';
+      // Единица — рядом с полем, в одной строке: под полем она читалась как
+      // отдельная подпись, и было непонятно, вводить ли её самому.
+      body(`<div class="answer-row"><input class="answer-input" type="text" autocomplete="off"
+        placeholder="Ответ" aria-label="Ответ"/>${unit}</div>`);
       const type = item.type;
       return {
         ...noop,
@@ -79,7 +82,7 @@ export function renderItem(host: HTMLElement, item: TaskItem): RenderedItem {
       // Кнопки вверх/вниз вместо перетаскивания: работают и мышью, и с клавиатуры.
       const order = shuffled(item.sequence);
       body(`<ol class="order-list">${order
-        .map((v) => `<li data-v="${esc(v)}"><span>${esc(v)}</span><button type="button" data-dir="up">↑</button><button type="button" data-dir="down">↓</button></li>`)
+        .map((v) => `<li data-v="${esc(v)}"><span>${esc(v)}</span><button type="button" data-dir="up" aria-label="Выше: ${esc(v)}">↑</button><button type="button" data-dir="down" aria-label="Ниже: ${esc(v)}">↓</button></li>`)
         .join('')}</ol>`);
       host.querySelector('.order-list')?.addEventListener('click', (ev) => {
         const btn = (ev.target as HTMLElement).closest<HTMLElement>('button[data-dir]');
@@ -103,7 +106,7 @@ export function renderItem(host: HTMLElement, item: TaskItem): RenderedItem {
     case 'matching': {
       const rights = shuffled(item.pairs.map((p) => p.right));
       body(`<div class="match">${item.pairs
-        .map((p) => `<div class="match-row"><span>${esc(p.left)}</span><select data-left="${esc(p.left)}">
+        .map((p) => `<div class="match-row"><span>${esc(p.left)}</span><select data-left="${esc(p.left)}" aria-label="Пара для: ${esc(p.left)}">
           <option value="">—</option>${rights.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('')}
         </select></div>`)
         .join('')}</div>`);
@@ -123,7 +126,7 @@ export function renderItem(host: HTMLElement, item: TaskItem): RenderedItem {
     case 'cloze': {
       let html = esc(item.stem);
       for (const blank of item.blanks) {
-        html = html.replace(`{{${blank.id}}}`, `<input class="blank" data-blank="${esc(blank.id)}" type="text"/>`);
+        html = html.replace(`{{${blank.id}}}`, `<input class="blank" data-blank="${esc(blank.id)}" type="text" aria-label="Пропуск"/>`);
       }
       host.innerHTML = `<div class="body"><p class="stem">${html}</p></div>${hints}`;
       return {
@@ -160,7 +163,7 @@ export function renderItem(host: HTMLElement, item: TaskItem): RenderedItem {
     case 'reflection': {
       const required = item.minChars ?? 40;
       body(`${(item.prompts ?? []).map((p) => `<p class="prompt">${esc(p)}</p>`).join('')}
-        <textarea class="answer-text" rows="5" placeholder="Напиши хотя бы ${required} символов"></textarea>
+        <textarea class="answer-text" rows="5" aria-label="Ответ" placeholder="Напиши хотя бы ${required} символов"></textarea>
         <p class="counter"></p>`);
       const area = host.querySelector<HTMLTextAreaElement>('.answer-text');
       const counter = host.querySelector<HTMLElement>('.counter');
