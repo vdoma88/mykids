@@ -7,6 +7,7 @@ import { AuthError, AuthService } from './services/auth.service.js';
 import { ContentError, ContentService } from './services/content.service.js';
 import { EconomyService, NotFoundError, RuleError } from './services/economy.service.js';
 import { LedgerService } from './services/ledger.service.js';
+import { LoginThrottle } from './services/throttle.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
 import { registerChildRoutes } from './routes/child.routes.js';
@@ -41,6 +42,8 @@ export interface AppOptions {
    * в журнале не оставалось ничего, и искать причину было негде.
    */
   logLevel?: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | undefined;
+  /** Своё ограничение попыток входа — для тестов с подставными часами. */
+  loginThrottle?: LoginThrottle | undefined;
 }
 
 /** Пакет в каталоге — то, что видно родителю при назначении. */
@@ -70,6 +73,8 @@ export interface Services {
    * результатом он больше не верит.
    */
   content: ContentService;
+  /** Попытки входа: перебирать пароль родителя из домашней сети нельзя. */
+  loginThrottle: LoginThrottle;
 }
 
 declare module 'fastify' {
@@ -151,6 +156,7 @@ export function buildApp(prisma: PrismaClient, options: AppOptions = {}): Fastif
     ledger: new LedgerService(prisma),
     catalog: () => readCatalog(options.contentRoot),
     content,
+    loginThrottle: options.loginThrottle ?? new LoginThrottle(),
   };
 
   const app = Fastify({ logger: options.logLevel ? { level: options.logLevel } : false });

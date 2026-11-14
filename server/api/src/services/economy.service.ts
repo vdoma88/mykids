@@ -431,8 +431,11 @@ export class EconomyService {
     childId: string, packId: string, at: Date, timezone: string,
   ): Promise<number> {
     const day = localMoment(at, timezone).day;
+    // Двое суток назад — с запасом на любой часовой пояс: сутки ребёнка
+    // режутся ниже, по его поясу. Без этого условия запрос тащил всю историю
+    // пакета за всё время, и каждый ответ становился медленнее предыдущего.
     const attempts = await this.prisma.attempt.findMany({
-      where: { childId, packId, credits: { gt: 0 } },
+      where: { childId, packId, credits: { gt: 0 }, createdAt: { gte: windowStart(at, 2) } },
       select: { credits: true, createdAt: true },
     });
     return attempts

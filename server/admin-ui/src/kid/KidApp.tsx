@@ -35,7 +35,9 @@ export function KidApp(): JSX.Element {
 
   // Без токена запрос не делаем вовсе: иначе первый 401 прилетает раньше, чем
   // ребёнок успел ввести токен.
-  const me = useAsync(() => api.childMe(), [reloadKey, hasToken], { enabled: hasToken });
+  // Раз в минуту, пока вкладку видно: агент списывает минуты, родитель
+  // подтверждает задания, — и цифры на странице не должны стоять на месте.
+  const me = useAsync(() => api.childMe(), [reloadKey, hasToken], { enabled: hasToken, refreshMs: 60_000 });
   const store = useAsync(() => api.childStore(), [reloadKey, hasToken], { enabled: hasToken });
   const refresh = (): void => setReloadKey((k) => k + 1);
 

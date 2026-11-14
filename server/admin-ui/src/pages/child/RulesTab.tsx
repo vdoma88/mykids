@@ -180,15 +180,18 @@ export function RulesTab({ childId, readOnly }: { childId: string; readOnly: boo
     setSaveErr(null);
     setSaving(true);
     try {
-      await api.savePolicy(childId, {
+      const saved = await api.savePolicy(childId, {
         timezone: policy.timezone,
         dailyLimitMinutes: policy.dailyLimitMinutes,
         carryOverMaxMinutes: policy.carryOverMaxMinutes,
         windows: policy.windows,
         economy: policy.economy,
       });
+      // Ответ сервера и есть новые правила: подставляем его сразу. Раньше
+      // черновик сбрасывался до перезагрузки, и на миг возвращались старые
+      // значения — выглядело так, будто сохранение не удалось.
+      policyQ.set(saved);
       setDraft(null);
-      policyQ.reload();
       toast.success('Политика сохранена.');
     } catch (err) {
       setSaveErr(errorText(err));

@@ -5,7 +5,7 @@ import { credits, minutes as minutesText, num } from '../lib/format.js';
 import { describeEffect } from '../lib/labels.js';
 import { errorText } from '../ui/Async.js';
 import { Icon } from '../ui/Icon.js';
-import { Alert, Card, Empty } from '../ui/kit.js';
+import { Alert, Card, Empty, NumberInput } from '../ui/kit.js';
 
 type Outcome = { tone: 'success' | 'danger'; text: string } | null;
 
@@ -47,8 +47,8 @@ function Convert({ me, onChanged }: { me: ChildMe; onChanged: () => void }): JSX
           <label htmlFor="conv" className="small muted">Сколько минут</label>
           <div className="stepper">
             <button type="button" aria-label="Меньше" onClick={() => setAmount((a) => clamp(a - 5))}>−</button>
-            <input id="conv" type="number" inputMode="numeric" min={1} max={600} value={amount}
-                   onChange={(e) => setAmount(clamp(e.target.valueAsNumber))} />
+            <NumberInput id="conv" className="" value={amount} onChange={setAmount} min={1} max={600}
+                         ariaLabel="Сколько минут" />
             <button type="button" aria-label="Больше" onClick={() => setAmount((a) => clamp(a + 5))}>+</button>
           </div>
           <span className="small muted">= {credits(cost)}</span>
