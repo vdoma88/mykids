@@ -5,6 +5,8 @@
  */
 export type ThemeChoice = 'system' | 'light' | 'dark';
 const KEY = 'mykids-theme';
+/** Событие смены темы: переключателей несколько, и все должны показывать одно. */
+export const THEME_CHANGED = 'mykids:theme';
 
 export function readTheme(): ThemeChoice {
   try {
@@ -23,4 +25,5 @@ export function applyTheme(choice: ThemeChoice): void {
     if (choice === 'system') localStorage.removeItem(KEY);
     else localStorage.setItem(KEY, choice);
   } catch { /* приватный режим: тема живёт до закрытия вкладки */ }
+  window.dispatchEvent(new CustomEvent<ThemeChoice>(THEME_CHANGED, { detail: choice }));
 }

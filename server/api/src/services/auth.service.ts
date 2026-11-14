@@ -36,14 +36,15 @@ export class AuthService {
     if (input.password.length < 10) {
       throw new AuthError('weak_password', 'Пароль должен быть не короче 10 символов.');
     }
-    const existing = await this.prisma.guardian.findUnique({ where: { email: input.email } });
+    const email = input.email.trim().toLowerCase();
+    const existing = await this.byEmail(email);
     if (existing) throw new AuthError('email_taken', 'Такой адрес уже зарегистрирован.');
 
     const family = await this.prisma.family.create({ data: { name: input.familyName } });
     const guardian = await this.prisma.guardian.create({
       data: {
         familyId: family.id,
-        email: input.email,
+        email,
         passwordHash: await hash(input.password),
         role: 'owner',
       },
@@ -58,7 +59,7 @@ export class AuthService {
    * входа превращается в способ узнать, какие адреса зарегистрированы.
    */
   async login(input: { email: string; password: string; totp?: string | undefined }): Promise<{ token: string; expiresAt: Date }> {
-    const guardian = await this.prisma.guardian.findUnique({ where: { email: input.email } });
+    const guardian = await this.byEmail(input.email);
     const invalid = new AuthError('invalid_credentials', 'Неверный адрес или пароль.');
     if (!guardian) {
       // Считаем хеш всё равно, чтобы по времени ответа нельзя было отличить
@@ -75,6 +76,20 @@ export class AuthService {
       }
     }
     return this.issueSession(guardian.id);
+  }
+
+  /**
+   * Родитель по почте — без учёта регистра и пробелов по краям.
+   *
+   * Телефонная клавиатура норовит начать адрес с заглавной, и «Parent@mail.ru»
+   * не находило «parent@mail.ru»: родитель видел «неверный адрес или пароль»
+   * при верных обоих. Новые адреса пишутся строчными, а старые, заведённые
+   * как попало, находятся всё равно.
+   */
+  private async byEmail(email: string): Promise<Guardian | null> {
+    return this.prisma.guardian.findFirst({
+      where: { email: { equals: email.trim(), mode: 'insensitive' } },
+    });
   }
 
   private async issueSession(guardianId: string): Promise<{ token: string; expiresAt: Date }> {

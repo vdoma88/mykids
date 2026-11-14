@@ -2,7 +2,8 @@ import type { JSX } from 'react';
 import { useState, type FormEvent } from 'react';
 import { api, type Me } from '../api.js';
 import { ROLES } from '../lib/labels.js';
-import { applyTheme, readTheme, type ThemeChoice } from '../lib/theme.js';
+import type { ThemeChoice } from '../lib/theme.js';
+import { useTheme } from '../layout/ThemeToggle.js';
 import { ErrorBox, errorText } from '../ui/Async.js';
 import { Icon } from '../ui/Icon.js';
 import { Alert, Avatar, Badge, Card, CopyButton, Field, PageHead, Tabs } from '../ui/kit.js';
@@ -160,14 +161,14 @@ function Guardians(): JSX.Element {
 }
 
 function Appearance(): JSX.Element {
-  const [theme, setTheme] = useState<ThemeChoice>(readTheme);
+  const [theme, setTheme] = useTheme();
   return (
     <Card title="Оформление" desc="Запоминается в этом браузере.">
       <Tabs<ThemeChoice>
         label="Тема"
         segmented
         value={theme}
-        onChange={(t) => { applyTheme(t); setTheme(t); }}
+        onChange={setTheme}
         tabs={[
           { key: 'system', label: 'Как в системе', icon: 'monitor' },
           { key: 'light', label: 'Светлая', icon: 'sun' },

@@ -179,6 +179,35 @@ export function ConfirmButton({ children, confirm, onConfirm, className = 'btn d
   );
 }
 
+/**
+ * Копирование в буфер обмена.
+ *
+ * Современный способ браузер даёт только по https или на localhost, а сервер
+ * дома открывают по http://192.168…: там кнопка «Скопировать» не работала
+ * никогда — как раз для токена устройства, который руками переписывать
+ * мучительно. Поэтому есть и старый способ, через выделение текста: он
+ * работает и по http.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { /* ниже — старый способ */ }
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  area.remove();
+  return ok;
+}
+
 export function CopyButton({ text, label = 'Скопировать' }: { text: string; label?: string }): JSX.Element {
   const toast = useToast();
   return (
@@ -186,12 +215,9 @@ export function CopyButton({ text, label = 'Скопировать' }: { text: s
       type="button"
       className="btn secondary sm"
       onClick={() => {
-        void navigator.clipboard?.writeText(text)
-          .then(() => toast.success('Скопировано.'))
-          // На http:// без localhost буфер обмена браузер не даёт: сказать,
-          // что делать руками, лучше, чем молча не скопировать.
-          .catch(() => toast.error('Браузер не дал скопировать — выделите текст и скопируйте вручную.'));
-        if (!navigator.clipboard) toast.error('Браузер не дал скопировать — выделите текст и скопируйте вручную.');
+        void copyText(text).then((ok) => (ok
+          ? toast.success('Скопировано.')
+          : toast.error('Браузер не дал скопировать — выделите текст и скопируйте вручную.')));
       }}
     >
       <Icon name="copy" size={16} />{label}

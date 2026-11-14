@@ -11,6 +11,8 @@ export interface AsyncState<T> {
   /** Первая загрузка: данных ещё нет. Перезагрузка поверх данных — не loading. */
   loading: boolean;
   reload: () => void;
+  /** Подставить свежие данные, известные без запроса: ответ на сохранение. */
+  set: (data: T) => void;
 }
 
 /**
@@ -26,7 +28,7 @@ export interface AsyncState<T> {
 export function useAsync<T>(
   load: () => Promise<T>,
   deps: unknown[] = [],
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; refreshMs?: number } = {},
 ): AsyncState<T> {
   const enabled = options.enabled ?? true;
   const [data, setData] = useState<T | null>(null);
@@ -38,11 +40,36 @@ export function useAsync<T>(
   loadRef.current = load;
 
   const reload = useCallback(() => { setTick((t) => t + 1); }, []);
+  const set = useCallback((d: T) => { setData(d); setError(null); setStatus(null); }, []);
+  const lastLoad = useRef(0);
+
+  // Вернулись на вкладку — данные могли устареть: агент списывал минуты,
+  // ребёнок отправил задание, второй родитель поменял правила. Не чаще раза в
+  // полминуты, чтобы переключение окон туда-сюда не превращалось в запросы.
+  // Плюс, если попросили, — по таймеру, пока вкладку видно.
+  const refreshMs = options.refreshMs;
+  useEffect(() => {
+    if (!enabled) return;
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoad.current > 30_000) reload();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    const timer = refreshMs
+      ? window.setInterval(() => { if (document.visibilityState === 'visible') reload(); }, refreshMs)
+      : undefined;
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      if (timer) window.clearInterval(timer);
+    };
+  }, [enabled, refreshMs, reload]);
 
   useEffect(() => {
     if (!enabled) { setLoading(false); return; }
     let alive = true;
     if (data === null) setLoading(true);
+    lastLoad.current = Date.now();
     loadRef.current()
       .then((d) => { if (alive) { setData(d); setError(null); setStatus(null); } })
       .catch((e: unknown) => {
@@ -55,7 +82,7 @@ export function useAsync<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick, enabled]);
 
-  return { data, error, status, loading, reload };
+  return { data, error, status, loading, reload, set };
 }
 
 /** Текст ошибки для человека: сетевой сбой — не «TypeError: Failed to fetch». */
