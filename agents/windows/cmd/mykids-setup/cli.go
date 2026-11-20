@@ -45,12 +45,18 @@ type cliArgs struct {
 type report struct {
 	path  string
 	lines []string
+	// echo — куда ещё показывать строки по мере появления: панель выводит
+	// их в своё окно, не дожидаясь конца.
+	echo func(string)
 }
 
 func (r *report) add(format string, a ...any) {
 	line := fmt.Sprintf(format, a...)
 	r.lines = append(r.lines, line)
 	toFile(line)
+	if r.echo != nil {
+		r.echo(line)
+	}
 }
 
 func (r *report) flush() {

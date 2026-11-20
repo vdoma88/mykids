@@ -64,15 +64,15 @@ func (h *handler) Execute(args []string, r <-chan svc.ChangeRequest, s chan<- sv
 				s <- c.CurrentStatus
 
 			case svc.Stop, svc.Shutdown:
-				s <- svc.Status{State: svc.StopPending}
+				s <- svc.Status{State: svc.StopPending, WaitHint: uint32(StopWait.Milliseconds())}
 				cancel()
 				// Ждём, пока работа доделает своё: она обязана сохранить
 				// состояние, иначе следующий запуск сочтёт остановку нештатной
 				// и спишет с ребёнка время ни за что.
 				select {
 				case <-done:
-				case <-time.After(20 * time.Second):
-					h.logf("работа не завершилась за 20 секунд, выходим")
+				case <-time.After(StopWait):
+					h.logf("работа не завершилась за %s, выходим", StopWait)
 				}
 				return false, 0
 
@@ -134,9 +134,10 @@ func Install(args ...string) error {
 	}
 
 	s, err := m.CreateService(Name, exe, mgr.Config{
-		DisplayName: DisplayName,
-		Description: Description,
-		StartType:   mgr.StartAutomatic,
+		DisplayName:      DisplayName,
+		Description:      Description,
+		StartType:        mgr.StartAutomatic,
+		ServiceStartName: Account,
 	}, args...)
 	if err != nil {
 		return fmt.Errorf("создание службы: %w", err)
@@ -202,10 +203,10 @@ func stop(s *mgr.Service) error {
 		}
 		return fmt.Errorf("остановка службы: %w", err)
 	}
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(StopWait + 10*time.Second)
 	for status.State != svc.Stopped {
 		if time.Now().After(deadline) {
-			return fmt.Errorf("служба не остановилась за 20 секунд")
+			return fmt.Errorf("служба не остановилась за %s", StopWait+10*time.Second)
 		}
 		time.Sleep(300 * time.Millisecond)
 		if status, err = s.Query(); err != nil {
@@ -233,10 +234,10 @@ func Control(cmd svc.Cmd, want svc.State) error {
 	if err != nil {
 		return fmt.Errorf("команда %d: %w", cmd, err)
 	}
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(StopWait + 10*time.Second)
 	for status.State != want {
 		if time.Now().After(deadline) {
-			return fmt.Errorf("служба не перешла в состояние %d за 20 секунд", want)
+			return fmt.Errorf("служба не перешла в состояние %d за %s", want, StopWait+10*time.Second)
 		}
 		time.Sleep(300 * time.Millisecond)
 		if status, err = s.Query(); err != nil {

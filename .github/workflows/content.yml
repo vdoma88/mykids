@@ -114,6 +114,13 @@ jobs:
         env:
           DATABASE_URL_E2E: postgresql://postgres:postgres@localhost:5432/mykids_test
 
+      # Сервер без Docker — тот, что ставится на Windows, — на настоящих
+      # PostgreSQL и Node: с пустого каталога, через миграции и регистрацию
+      # семьи, до остановки и повторного запуска. Под Windows здесь только
+      # сами программы; всё, что ими управляет, проверяется тут.
+      - name: Сервер без Docker
+        run: deploy/server-windows/live-test.sh
+
   image:
     name: Образ сервера
     runs-on: ubuntu-latest
@@ -176,9 +183,24 @@ jobs:
             echo "каталог пакетов пуст: $packs" >&2; exit 1; }
           echo "образ отдаёт страницы, API и задания"
 
+      # Тот самый файл, который семья вставляет в интерфейс NAS, — на только
+      # что собранном образе. Без пароля и .env база обязана подняться, а
+      # сервер — применить миграции и ответить.
+      - name: Compose для NAS
+        run: |
+          docker rm -f mykids
+          docker tag mykids-server ghcr.io/vdoma88/mykids-server:latest
+          docker compose -f deploy/nas/docker-compose.yml up -d --wait --wait-timeout 180
+          curl -fsS http://127.0.0.1:3000/health
+          curl -fsS -X POST http://127.0.0.1:3000/auth/register -H 'content-type: application/json' \
+            -d '{"familyName":"NAS","email":"nas@example.com","password":"очень-длинный-пароль"}' >/dev/null
+          echo "compose для NAS поднялся без настройки"
+
       - name: Логи при падении
         if: failure()
-        run: docker logs mykids || true
+        run: |
+          docker logs mykids || true
+          docker compose -f deploy/nas/docker-compose.yml logs || true
 
   agent:
     name: Windows-агент

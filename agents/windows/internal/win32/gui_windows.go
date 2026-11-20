@@ -100,6 +100,10 @@ type App struct {
 	intro   string
 	buttons []Button
 	fields  []Field
+	// start — что сделать сразу после открытия окна, как если бы нажали
+	// кнопку. Панель состояния без него открывалась бы пустой.
+	start    func(f Form, log func(string))
+	iconFile string
 
 	hwnd   windows.HWND
 	edit   windows.HWND
@@ -128,6 +132,31 @@ func NewApp(title, intro string, buttons []Button) *App {
 func (a *App) WithFields(fields ...Field) *App {
 	a.fields = fields
 	return a
+}
+
+// WithStart задаёт действие при открытии окна.
+func (a *App) WithStart(do func(f Form, log func(string))) *App {
+	a.start = do
+	return a
+}
+
+// WithIcon задаёт иконку окна из файла .ico.
+func (a *App) WithIcon(path string) *App {
+	a.iconFile = path
+	return a
+}
+
+// Clear стирает отчёт. Нужен окну состояния: «Обновить» должно показывать
+// новое состояние, а не дописывать его под старое.
+func (a *App) Clear() {
+	a.mu.Lock()
+	a.text = nil
+	pending := a.dirty
+	a.dirty = true
+	a.mu.Unlock()
+	if a.hwnd != 0 && !pending {
+		procPostMessageW.Call(uintptr(a.hwnd), wmAppLog, 0, 0)
+	}
 }
 
 // Value — что сейчас набрано в поле с такой подписью.
@@ -224,8 +253,13 @@ func RunApp(a *App) error {
 		return err
 	}
 
-	a.Log(a.intro)
+	if a.intro != "" {
+		a.Log(a.intro)
+	}
 	a.render()
+	if a.start != nil {
+		a.run(a.start)
+	}
 
 	var m msg
 	for {
@@ -280,6 +314,10 @@ func (a *App) create() error {
 	}
 	a.hwnd = windows.HWND(hwnd)
 	a.font = guiFont()
+	if icon := loadIcon(a.iconFile); icon != 0 {
+		procSendMessageW.Call(hwnd, wmSetIcon, 0, icon) // маленькая
+		procSendMessageW.Call(hwnd, wmSetIcon, 1, icon) // большая
+	}
 
 	// Поля ввода — до кнопок: порядок обхода по Tab идёт в порядке создания,
 	// и родитель, нажимая Tab, должен идти сверху вниз, а не от кнопок назад.
@@ -458,7 +496,11 @@ func (a *App) click(id int) {
 	if i < 0 || i >= len(a.buttons) {
 		return
 	}
+	a.run(a.buttons[i].Do)
+}
 
+// run выполняет действие в отдельной горутине, погасив кнопки.
+func (a *App) run(do func(f Form, log func(string))) {
 	a.mu.Lock()
 	if a.busy {
 		a.mu.Unlock()
@@ -470,7 +512,6 @@ func (a *App) click(id int) {
 	// Кнопки гасим на время работы: второй запуск поверх первого перемешал
 	// бы отчёт, и понять в нём что-нибудь стало бы нельзя.
 	a.enable(false)
-	do := a.buttons[i].Do
 	go func() {
 		defer procPostMessageW.Call(uintptr(a.hwnd), wmAppDone, 0, 0)
 		// Окно, которое молча исчезает, — худшее, что может случиться с

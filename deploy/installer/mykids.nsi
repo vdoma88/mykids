@@ -110,7 +110,10 @@ Page custom ConnectShow ConnectLeave
 !insertmacro MUI_PAGE_INSTFILES
 
 !define MUI_FINISHPAGE_TITLE "MyKids работает"
-!define MUI_FINISHPAGE_TEXT "Служба запущена и будет стартовать вместе с Windows.$\r$\n$\r$\nЧто проверить:$\r$\n$\r$\n1. Войдите в учётную запись ребёнка — в трее появится значок с остатком времени.$\r$\n$\r$\n2. На рабочем столе — ярлык «Задания MyKids»: задания и магазин.$\r$\n$\r$\n3. Пуск → MyKids → «Проверка MyKids» покажет, что видит агент. Запускать — из учётной записи ребёнка."
+!define MUI_FINISHPAGE_TEXT "Служба запущена и будет стартовать вместе с Windows.$\r$\n$\r$\nЧто проверить:$\r$\n$\r$\n1. Войдите в учётную запись ребёнка — в трее появится значок с остатком времени.$\r$\n$\r$\n2. На рабочем столе — ярлык «Задания MyKids»: задания и магазин.$\r$\n$\r$\n3. Пуск → MyKids → «Панель MyKids»: работает ли служба, есть ли связь с сервером, сколько осталось у ребёнка."
+!define MUI_FINISHPAGE_RUN "$INSTDIR\mykids-setup.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Открыть панель MyKids"
+!define MUI_FINISHPAGE_RUN_NOTCHECKED
 !define MUI_FINISHPAGE_LINK "Открыть админку MyKids"
 !define MUI_FINISHPAGE_LINK_LOCATION "$Server"
 !define MUI_FINISHPAGE_NOAUTOCLOSE
@@ -482,6 +485,9 @@ Section "MyKids" SecMain
 
   DetailPrint "Ярлыки"
   CreateDirectory "$SMPROGRAMS\MyKids"
+  ; Панель — главный ярлык для родителя: состояние службы и связи,
+  ; перепривязка, перезапуск. Раньше всё это было командой в PowerShell.
+  CreateShortcut "$SMPROGRAMS\MyKids\Панель MyKids.lnk" "$INSTDIR\mykids-setup.exe" "" "$INSTDIR\mykids.ico" 0 SW_SHOWNORMAL "" "Состояние MyKids на этом компьютере"
   CreateShortcut "$SMPROGRAMS\MyKids\Проверка MyKids.lnk" "$INSTDIR\mykids-check.exe" "" "$INSTDIR\mykids.ico" 0 SW_SHOWNORMAL "" "Что агент видит на этом компьютере"
   CreateShortcut "$SMPROGRAMS\MyKids\Удалить MyKids.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\mykids.ico"
   ; Задания — главное, что ребёнку нужно от MyKids, и до сих пор адрес он
@@ -525,6 +531,7 @@ Section "un.Программы и служба" SecUnMain
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
 
+  Delete "$SMPROGRAMS\MyKids\Панель MyKids.lnk"
   Delete "$SMPROGRAMS\MyKids\Проверка MyKids.lnk"
   Delete "$SMPROGRAMS\MyKids\Удалить MyKids.lnk"
   Delete "$SMPROGRAMS\MyKids\Задания и магазин.url"
