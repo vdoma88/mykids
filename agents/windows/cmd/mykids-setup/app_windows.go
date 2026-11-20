@@ -3,229 +3,210 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows/svc"
 
 	"github.com/vdoma88/mykids/agents/windows/internal/setup"
 	"github.com/vdoma88/mykids/agents/windows/internal/win32"
+	"github.com/vdoma88/mykids/agents/windows/internal/winsvc"
 )
 
 var app *win32.App
 
-// form — то, что установщику нужно от окна. Свой псевдоним, чтобы обёртка
+// form — то, что панели нужно от окна. Свой псевдоним, чтобы обёртка
 // журнала не тянула за собой весь пакет win32 в своей сигнатуре.
 type form = win32.Form
 
+const panelTitle = "Панель MyKids"
+
+// run — панель. Она управляет службой, а это делает только администратор:
+// не запущенная от его имени, панель перезапускает себя сама — Windows
+// спросит разрешение. Помнить про «правую кнопку → от имени администратора»
+// родитель не обязан.
 func run() error {
-	app = win32.NewApp(
-		"MyKids — установка "+version,
-		intro(),
-		[]win32.Button{
-			{Text: "Установить", Do: alsoToFile(install)},
-			{Text: "Скопировать отчёт", Do: func(_ win32.Form, log func(string)) {
-				copyReport(log)
-			}},
-		},
-	).WithFields(
-		win32.Field{Label: setup.FieldServer},
+	if !win32.Elevated() {
+		self, err := os.Executable()
+		if err == nil {
+			err = win32.RunElevated(self, "")
+		}
+		if err != nil {
+			win32.Fail(panelTitle, "Панели нужны права администратора: она управляет службой MyKids.\n\nWindows не дала их: "+err.Error())
+		}
+		return nil
+	}
+
+	e, _ := bound()
+	app = win32.NewApp(panelTitle+" "+version, "", []win32.Button{
+		{Text: "Обновить", Do: refresh},
+		{Text: "Привязать", Do: rebind},
+		{Text: "Перезапустить службу", Do: alsoToFile(restart)},
+		{Text: "Открыть админку", Do: openAdmin},
+		{Text: "Скопировать отчёт", Do: func(_ win32.Form, log func(string)) { copyReport(log) }},
+	}).WithFields(
+		win32.Field{Label: setup.FieldServer, Value: e.ServerURL},
 		win32.Field{Label: setup.FieldToken, Secret: true},
-		win32.Field{Label: setup.FieldChild},
-	)
+		win32.Field{Label: setup.FieldChild, Value: childAccount()},
+	).WithStart(refresh).WithIcon(besideSelf("mykids.ico"))
 	return win32.RunApp(app)
 }
 
-func intro() string {
-	lines := []string{
-		"Заполните три поля и нажмите «Установить».",
-		"",
-		"  " + setup.FieldServer + " — тот, по которому вы открываете админку MyKids.",
-		"  " + setup.FieldToken + " — кнопка «Выдать токен» на странице ребёнка. Показывается один раз.",
-		"  " + setup.FieldChild + " — имя учётной записи, в которой работает ребёнок.",
-		"",
+func besideSelf(name string) string {
+	self, err := os.Executable()
+	if err != nil {
+		return name
 	}
-	lines = append(lines,
-		"Всё, что здесь появится, пишется и в файл:",
-		"  "+logPath(),
-		"Если окно вдруг закроется само — отчёт останется там.",
-		"")
-	if !elevated() {
-		lines = append(lines,
-			"Сейчас программа запущена без прав администратора, и установить ничего не сможет:",
-			"служба регистрируется на всю машину. Закройте окно и запустите её правой кнопкой →",
-			"«Запуск от имени администратора».",
-			"")
-	}
-	return join(lines)
+	return filepath.Join(filepath.Dir(self), name)
 }
 
-// install — всё, что делает установщик. Идёт в отдельной горутине: окно не
-// должно застывать, пока привязка ждёт ответа сервера.
-func install(f form, log func(string)) {
-	in := setup.Normalize(setup.Input{
+// childAccount — учётная запись ребёнка, которую запомнил установщик.
+func childAccount() string {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
+		`Software\Microsoft\Windows\CurrentVersion\Uninstall\MyKids`, registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, _ := k.GetStringValue("ChildAccount")
+	return v
+}
+
+// refresh — состояние словами. Ничего не меняет: только смотрит.
+func refresh(_ form, log func(string)) {
+	app.Clear()
+	log("Состояние на " + time.Now().Format("15:04:05"))
+	log("")
+
+	state, installed, err := winsvc.State()
+	switch {
+	case err != nil:
+		log("Служба: не удалось узнать — " + err.Error())
+	case !installed:
+		log("Служба: НЕ УСТАНОВЛЕНА — время не считается.")
+		log("    Запустите установщик MyKids-Setup ещё раз.")
+	case state == svc.Running:
+		log("Служба: работает и запускается вместе с Windows.")
+	default:
+		log("Служба: " + winsvc.StateName(state) + " — пока она не работает, время не считается.")
+		log("    Нажмите «Перезапустить службу».")
+	}
+
+	e, ok := bound()
+	if !ok {
+		log("Привязка: компьютер не привязан к серверу — учёт никуда не уходит.")
+		log("    Впишите адрес сервера и токен выше и нажмите «Привязать».")
+		log("")
+		log("Отчёт пишется и в " + logPath())
+		return
+	}
+	child := e.ChildURL
+	if child == "" {
+		child = e.ServerURL + "/child"
+	}
+	log("Сервер: " + e.ServerURL)
+	log("Задания ребёнка: " + child)
+
+	in := setup.Input{Server: e.ServerURL, Token: e.DeviceToken}
+	v, p := setup.VerifyToken(context.Background(), &http.Client{Timeout: setup.VerifyTimeout}, in)
+	if p != nil {
+		log("")
+		log("Связь с сервером: НЕТ")
+		log(setup.Describe(*p))
+	} else {
+		log("Связь с сервером: есть, это компьютер ребёнка «" + v.Child + "».")
+		log(fmt.Sprintf("Сейчас у ребёнка: %d мин экранного времени, %d кредитов.", v.Minutes, v.Credits))
+	}
+	if name := childAccount(); name != "" {
+		log("Учётная запись ребёнка в Windows: " + name)
+	}
+	log("")
+	log("Что видит сам ребёнок, покажет «Проверка MyKids» — её запускают из его учётной записи.")
+	log("Отчёт пишется и в " + logPath())
+}
+
+// rebind — привязать заново: новый токен, новый адрес сервера или другая
+// учётная запись. Те же проверки и те же шаги, что в мастере установки.
+func rebind(f form, log func(string)) {
+	a := cliArgs{dir: filepath.Dir(besideSelf(agentName))}
+	a.in = setup.Input{
 		Server:    f.Value(setup.FieldServer),
 		Token:     f.Value(setup.FieldToken),
 		ChildUser: f.Value(setup.FieldChild),
-	})
-
-	log("")
-	log("Проверяю введённое…")
-	problems := setup.Check(in)
-	for _, p := range problems {
-		mark := "[ !! ]"
-		if p.Severity == setup.Warn {
-			mark = "[ ?? ]"
-		}
-		log(fmt.Sprintf("%s %s: %s", mark, p.Field, p.Detail))
-		if p.Hint != "" {
-			log("    " + p.Hint)
-		}
 	}
-	if setup.Blocking(problems) {
+
+	app.Clear()
+	log("Проверяю…")
+	r := &report{echo: log}
+	if cmdVerify(a, r) != exitOK {
 		log("")
-		log("Ничего не тронуто. Исправьте отмеченное и нажмите «Установить» ещё раз.")
+		log("Ничего не тронуто. Исправьте отмеченное и нажмите «Привязать» ещё раз.")
 		return
 	}
-
-	// Адрес, дописанный за родителя, называем вслух: молча исправленный адрес —
-	// это адрес, которого он не вводил, и ошибку потом он будет искать не там.
-	log("")
-	log("Сервер:          " + in.Server)
-	log("Задания ребёнка: " + in.ChildURL)
-	log("")
-
-	steps := setup.Steps()
-	do := func(name string, fn func() error) bool {
-		for _, s := range steps {
-			if s.Name != name {
-				continue
-			}
-			log("→ " + s.Name)
-			if err := fn(); err != nil {
-				log("")
-				log("[ !! ] " + setup.Explain(s.Name, err))
-				log("    зачем этот шаг: " + s.Why)
-				return false
-			}
-			return true
-		}
-		return false
-	}
-
-	if !do("Права администратора", func() error {
-		if !elevated() {
-			return fmt.Errorf("программа запущена от обычного пользователя")
-		}
-		log("    есть")
-		return nil
-	}) {
-		return
-	}
-
-	if !do("Учётная запись ребёнка", func() error { return checkChild(in.ChildUser, log) }) {
-		return
-	}
-
-	var exe string
-	if !do("Копирование агента", func() error {
-		src, err := agentBeside()
-		if err != nil {
-			return err
-		}
-		exe, err = copyAgent(src)
-		if err != nil {
-			return err
-		}
-		log("    " + exe)
-		return nil
-	}) {
-		return
-	}
-
-	data := dataDir()
-	if !do("Каталог данных", func() error {
-		if err := makeDataDir(data); err != nil {
-			return err
-		}
-		log("    " + data + " — доступ только службе и администраторам")
-		return nil
-	}) {
-		return
-	}
-
-	if !do("Привязка устройства", func() error {
-		out, err := agentRun(exe, "-data", data, "enroll",
-			"-server", in.Server, "-token", in.Token, "-child-url", in.ChildURL)
-		if out != "" {
-			log("    " + out)
-		}
-		return err
-	}) {
-		return
-	}
-
-	if !do("Регистрация службы", func() error {
-		out, err := agentRun(exe, "-data", data, "service", "install")
-		if out != "" {
-			log("    " + out)
-		}
-		return err
-	}) {
-		return
-	}
-
-	if !do("Запуск службы", func() error {
-		out, err := agentRun(exe, "-data", data, "service", "start")
-		if out != "" {
-			log("    " + out)
-		}
-		return err
-	}) {
+	if !win32.Confirm(panelTitle, strings.Join(r.lines, "\n")+"\n\nПривязать этот компьютер? Служба перезапустится.") {
+		log("")
+		log("Отменено — ничего не тронуто.")
 		return
 	}
 
 	log("")
-	for _, line := range setup.Done(in) {
-		log(line)
+	r = &report{echo: log}
+	if cmdApply(a, r) != exitOK {
+		return
 	}
+	saveChildAccount(a.in.ChildUser)
+	log("")
+	log("Готово.")
 }
 
-// checkChild — единственное условие, без которого всё остальное бессмысленно.
-func checkChild(name string, log func(string)) error {
+func saveChildAccount(name string) {
+	name = strings.TrimSpace(name)
 	if name == "" {
-		log("    имя не указано — проверить не могу, проверьте сами")
-		return nil
+		return
 	}
-	isAdmin, known, err := childIsAdmin(name)
-	switch {
-	case err != nil:
-		// Не сумев проверить, установку не срываем: невозможность проверить —
-		// не то же самое, что провал проверки. Но и молчать не имеем права.
-		log("    не удалось проверить: " + err.Error())
-		log("    убедитесь сами, что учётная запись обычная, а не администратор")
-		return nil
-	case !known:
-		log("    проверить не удалось — убедитесь сами")
-		return nil
-	case isAdmin:
-		return fmt.Errorf("учётная запись «%s» состоит в администраторах", name)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
+		`Software\Microsoft\Windows\CurrentVersion\Uninstall\MyKids`, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
 	}
-	log(fmt.Sprintf("    «%s» — обычная, без прав администратора: так и надо", name))
-	return nil
+	defer k.Close()
+	_ = k.SetStringValue("ChildAccount", name)
 }
 
-// agentBeside ищет агент рядом с установщиком: их кладут в одну папку со
-// страницы релиза, и просить родителя указать путь незачем.
-func agentBeside() (string, error) {
-	self, err := os.Executable()
-	if err != nil {
-		return "", err
+func restart(_ form, log func(string)) {
+	app.Clear()
+	exe := besideSelf(agentName)
+	log("Останавливаю службу…")
+	if _, err := agentRun(exe, "-data", dataDir(), "service", "stop"); err != nil {
+		log("    " + err.Error())
 	}
-	path := filepath.Join(filepath.Dir(self), agentName)
-	if _, err := os.Stat(path); err != nil {
-		return "", fmt.Errorf("рядом с установщиком нет %s", agentName)
+	log("Запускаю…")
+	if _, err := agentRun(exe, "-data", dataDir(), "service", "start"); err != nil {
+		log(setup.Explain("Запуск службы", err))
+		return
 	}
-	return path, nil
+	if !waitRunning(15 * time.Second) {
+		log(setup.Explain("Запуск службы", fmt.Errorf("служба не перешла в рабочее состояние за 15 секунд")))
+		return
+	}
+	log("Служба работает.")
+}
+
+func openAdmin(f form, log func(string)) {
+	server := setup.Normalize(setup.Input{Server: f.Value(setup.FieldServer)}).Server
+	if server == "" {
+		log("Адрес сервера не указан.")
+		return
+	}
+	if err := win32.Open(server); err != nil {
+		log("Не удалось открыть браузер: " + err.Error())
+	}
 }
 
 func copyReport(log func(string)) {
@@ -234,15 +215,4 @@ func copyReport(log func(string)) {
 		return
 	}
 	log("отчёт скопирован — его можно переслать тому, кто помогает с настройкой")
-}
-
-func join(lines []string) string {
-	out := ""
-	for i, l := range lines {
-		if i > 0 {
-			out += "\n"
-		}
-		out += l
-	}
-	return out
 }

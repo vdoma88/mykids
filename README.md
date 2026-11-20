@@ -32,10 +32,15 @@ Windows-агент со службой — на месте. Android-агента
 
 ## Сервер
 
-```bash
-cp deploy/.env.example deploy/.env      # и смените пароль с секретом
-docker compose -f deploy/docker-compose.yml up -d
-```
+Без терминала, двумя способами (подробно — [`docs/SETUP.md`](docs/SETUP.md)):
+
+- **Windows:** `MyKids-Server-Setup-X.Y.Z.exe` со страницы релиза. Node.js и
+  PostgreSQL внутри, служба, окно управления с адресами и резервными копиями
+  ([`deploy/server-windows`](deploy/server-windows)).
+- **NAS / Docker:** вставить [`deploy/nas/docker-compose.yml`](deploy/nas/docker-compose.yml)
+  в интерфейс NAS — готовый образ `ghcr.io/vdoma88/mykids-server`, без `.env`.
+
+Из исходников: `docker compose -f deploy/docker-compose.yml up -d --build`.
 
 Источник истины по балансам и политикам ([`server/api`](server/api/README.md)).
 Без него раннер и агент считают кредиты локально, а такие данные ребёнок может

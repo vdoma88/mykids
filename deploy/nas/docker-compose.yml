@@ -1,0 +1,63 @@
+# MyKids на NAS или любой машине с Docker — без терминала.
+#
+# Этот файл вставляется целиком в графический интерфейс:
+#   Synology   — Container Manager → Проект → Создать → «Создать docker-compose.yml»;
+#   QNAP       — Container Station → Приложения → Создать;
+#   Portainer  — Stacks → Add stack → Web editor;
+#   TrueNAS    — Apps → Discover → Install via YAML.
+#
+# Ничего править не нужно. После запуска откройте http://адрес-NAS:3000/ и
+# заведите семью. Если порт 3000 на NAS занят, поменяйте левое число в
+# строке "3000:3000", например на "3080:3000", и открывайте :3080.
+#
+# Пароля базы здесь нет намеренно. База живёт в отдельной внутренней сети
+# Docker, куда нет хода ни из дома, ни из интернета, — только серверу MyKids.
+# Пароль, который каждый должен придумать и вписать сам, на деле оставался
+# бы «смените-меня» из примера: защиты от этого меньше, чем от закрытой сети.
+#
+# Обновление — в том же интерфейсе: «Обновить образ» / «Pull and redeploy».
+# Данные лежат в томе mykids-db и переживают и обновление, и пересоздание.
+
+name: mykids
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mykids
+      POSTGRES_DB: mykids
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - mykids-db:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mykids"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  server:
+    image: ghcr.io/vdoma88/mykids-server:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mykids@db:5432/mykids
+      LOG_LEVEL: warn
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    networks:
+      - internal
+      - default
+
+volumes:
+  mykids-db:
+
+networks:
+  # internal: true — из этой сети нет выхода наружу и в неё нет входа.
+  internal:
+    internal: true

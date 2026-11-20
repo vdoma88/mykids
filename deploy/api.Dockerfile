@@ -47,13 +47,30 @@ COPY --from=web /app/server/admin-ui/dist server/admin-ui/dist
 # экономика держится на ручных начислениях родителя.
 COPY content/packs/ content/packs/
 
+# Prisma CLI и tsx — той же версии, что в package-lock, и внутри образа.
+# Раньше их не было: npx скачивал prisma при каждом запуске контейнера, и
+# сервер без интернета не стартовал вовсе, а с интернетом получал последнюю
+# версию — какую угодно, в том числе несовместимую со схемой.
+RUN npm install --no-save --ignore-scripts \
+      "prisma@$(node -p "require('@prisma/client/package.json').version")" \
+      "tsx@$(node -p "require('./package-lock.json').packages['node_modules/tsx'].version")"
+
 # Клиент Prisma генерируется под платформу образа, а не хостовую
-RUN npx prisma generate --schema server/api/prisma/schema.prisma
-RUN npm install --no-save tsx
+RUN npx --no-install prisma generate --schema server/api/prisma/schema.prisma
 
 ENV NODE_ENV=production
 EXPOSE 3000
 
+LABEL org.opencontainers.image.source="https://github.com/vdoma88/mykids" \
+      org.opencontainers.image.title="MyKids" \
+      org.opencontainers.image.description="Домашний сервер MyKids: админка родителя, задания ребёнка, учёт экранного времени"
+
+# Здоровье — для графических интерфейсов NAS: «работает» там должно значить
+# «отвечает», а не «процесс не упал». curl в образе нет, а node есть.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
 # Миграции применяются на старте: для домашнего развёртывания это проще,
-# чем отдельный шаг, а migrate deploy идемпотентна.
-CMD ["sh", "-c", "npx prisma migrate deploy --schema server/api/prisma/schema.prisma && npx tsx server/api/src/main.ts"]
+# чем отдельный шаг, а migrate deploy идемпотентна. --no-install: ничего не
+# скачивать на старте, всё уже в образе.
+CMD ["sh", "-c", "npx --no-install prisma migrate deploy --schema server/api/prisma/schema.prisma && npx --no-install tsx server/api/src/main.ts"]

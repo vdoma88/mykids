@@ -4,11 +4,11 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -16,10 +16,7 @@ import (
 // Всё, что установщик делает с машиной. Решения — в internal/setup; здесь
 // только исполнение, и проверить его можно лишь на настоящей Windows.
 
-const (
-	installDir = `C:\Program Files\MyKids`
-	agentName  = "mykids-agent.exe"
-)
+const agentName = "mykids-agent.exe"
 
 func dataDir() string {
 	if p := os.Getenv("ProgramData"); p != "" {
@@ -66,30 +63,6 @@ type noAccount string
 
 func (n noAccount) Error() string {
 	return fmt.Sprintf("учётной записи «%s» на этой машине нет", string(n))
-}
-
-// copyAgent кладёт агент туда, где ребёнок его не сотрёт.
-func copyAgent(from string) (string, error) {
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
-		return "", err
-	}
-	dst := filepath.Join(installDir, agentName)
-
-	src, err := os.Open(from)
-	if err != nil {
-		return "", fmt.Errorf("не найден %s: %w", from, err)
-	}
-	defer src.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return "", err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, src); err != nil {
-		return "", err
-	}
-	return dst, nil
 }
 
 // makeDataDir заводит каталог данных и закрывает его от ребёнка.
@@ -140,8 +113,13 @@ func makeDataDir(path string) error {
 //
 // Вывод нужен именно при ошибке: «код возврата 1» не говорит ничего, а
 // «токен не принят» говорит всё.
+//
+// Без окна: агент собран оконной программой и консоли не открывает, но
+// старая версия рядом могла быть консольной — и посреди установки на экране
+// мелькнуло бы чёрное окно, которое выглядит как сбой.
 func agentRun(exe string, args ...string) (string, error) {
 	cmd := exec.Command(exe, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 	out, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(out))
 	if err != nil {

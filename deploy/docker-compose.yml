@@ -1,14 +1,20 @@
-# Развёртывание MyKids дома.
+# Развёртывание MyKids дома из исходников.
 #
-#   cp deploy/.env.example deploy/.env   # и обязательно смените пароль
-#   docker compose -f deploy/docker-compose.yml up -d
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Без терминала — готовым образом, см. deploy/nas/docker-compose.yml.
 #
 # После этого родитель открывает http://адрес-этой-машины:3000/, а ребёнок —
 # тот же адрес с /child. Отдельного сервера для интерфейса нет: страницы
 # отдаёт сам API, и адрес у семьи один.
 #
 # Данные об активности ребёнка не уходят в чужое облако: всё остаётся на этой
-# машине. Порт базы наружу не публикуется — к ней ходит только API.
+# машине. База живёт во внутренней сети Docker, куда ходит только API, —
+# поэтому пароля по умолчанию у неё нет, и .env заводить не обязательно.
+#
+# Установки до 0.9.1 заводили базу с паролем из deploy/.env. Её настройки
+# доступа хранятся в самом томе и не меняются: пока deploy/.env с паролем на
+# месте, всё работает как раньше.
 
 services:
   db:
@@ -16,17 +22,22 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mykids}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте пароль в deploy/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       POSTGRES_DB: ${POSTGRES_DB:-mykids}
+      # Действует только при первом запуске, когда база заводится.
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mykids}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   api:
+    image: ghcr.io/vdoma88/mykids-server:local
     build:
       context: ..
       dockerfile: deploy/api.Dockerfile
@@ -35,11 +46,18 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-mykids}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-mykids}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mykids}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-mykids}
       LOG_LEVEL: ${LOG_LEVEL:-warn}
       PORT: 3000
     ports:
       - "${API_PORT:-3000}:3000"
+    networks:
+      - internal
+      - default
 
 volumes:
   db-data:
+
+networks:
+  internal:
+    internal: true

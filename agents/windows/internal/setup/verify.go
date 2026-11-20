@@ -33,6 +33,10 @@ type Verified struct {
 	// Child — имя ребёнка, к которому привязан токен. Установщик его
 	// показывает: токен, выданный не тому ребёнку, иначе не отличить.
 	Child string
+	// Minutes и Credits — остатки ребёнка. Панель показывает их, чтобы
+	// родитель видел то же, что видит ребёнок, не открывая админку.
+	Minutes int
+	Credits int
 }
 
 // VerifyToken спрашивает сервер, чьё это устройство.
@@ -74,12 +78,16 @@ func VerifyToken(ctx context.Context, hc *http.Client, in Input) (Verified, *Pro
 	}
 
 	var me struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		Balances struct {
+			Minutes int `json:"minutes"`
+			Credits int `json:"credits"`
+		} `json:"balances"`
 	}
 	if err := json.Unmarshal(body, &me); err != nil || strings.TrimSpace(me.Name) == "" {
 		return Verified{}, notMyKids(in.Server, "ответ не похож на ответ MyKids")
 	}
-	return Verified{Child: strings.TrimSpace(me.Name)}, nil
+	return Verified{Child: strings.TrimSpace(me.Name), Minutes: me.Balances.Minutes, Credits: me.Balances.Credits}, nil
 }
 
 // unreachable — сервер не ответил вовсе. Причина почти всегда одна из трёх, и

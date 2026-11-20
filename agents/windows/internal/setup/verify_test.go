@@ -22,14 +22,14 @@ func TestVerifyTokenAcceptedNamesTheChild(t *testing.T) {
 	in := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		gotAuth, gotPath = r.Header.Get("authorization"), r.URL.Path
 		w.Header().Set("content-type", "application/json")
-		w.Write([]byte(`{"name":" Маша ","balances":{}}`))
+		w.Write([]byte(`{"name":" Маша ","balances":{"minutes":45,"credits":120}}`))
 	})
 	v, p := VerifyToken(context.Background(), http.DefaultClient, in)
 	if p != nil {
 		t.Fatalf("неожиданная проблема: %+v", p)
 	}
-	if v.Child != "Маша" {
-		t.Errorf("имя ребёнка: %q", v.Child)
+	if v.Child != "Маша" || v.Minutes != 45 || v.Credits != 120 {
+		t.Errorf("ответ разобран неверно: %+v", v)
 	}
 	if gotAuth != "Bearer tok-1" || gotPath != "/child/me" {
 		t.Errorf("запрос: %q %q", gotAuth, gotPath)

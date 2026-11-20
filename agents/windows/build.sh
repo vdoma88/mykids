@@ -11,8 +11,12 @@ if [ -n "${VERSION:-}" ]; then
   LDFLAGS="$LDFLAGS -X main.version=$VERSION"
 fi
 
+# Агент — тоже оконная программа, хотя окна у него нет. Консольная открыла
+# бы чёрное окно на двойной щелчок, а помощник, запущенный службой в сессии
+# ребёнка, держал бы консоль, которую ребёнок может закрыть. Вывод команд при
+# этом никуда не девается: установщик и панель читают его через каналы.
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
-  -ldflags "$LDFLAGS" \
+  -ldflags "$LDFLAGS -H windowsgui" \
   -o dist/mykids-agent.exe ./cmd/mykids-agent
 
 # Проверка собирается как оконная программа: «-H windowsgui» убирает чёрное

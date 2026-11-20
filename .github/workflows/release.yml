@@ -19,6 +19,8 @@ on:
 
 permissions:
   contents: write
+  # Образ сервера публикуется в GitHub Container Registry рядом с релизом.
+  packages: write
 
 jobs:
   build:
@@ -80,11 +82,30 @@ jobs:
           sudo apt-get install -y -qq nsis
           VERSION="${VERSION:-0.0.0}" deploy/build-installer.sh
 
+      # Сервер для Windows: Node, PostgreSQL и API в одном установщике.
+      # Скачиваемое кэшируется: триста мегабайт PostgreSQL на каждый релиз —
+      # лишняя нагрузка на чужой сервер и лишняя точка отказа.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: server-windows-${{ hashFiles('deploy/server-windows/build.sh') }}
+      - name: Установщик сервера
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          sudo apt-get install -y -qq unzip
+          VERSION="${VERSION:-0.0.0}" deploy/server-windows/build.sh
+
       # Контрольная сумма: без неё нельзя проверить, что скачался наш файл.
       # tee, а не просто перенаправление: сумму нужно видеть и в логе, чтобы
       # сверить её с тем, что скачали, не распаковывая артефакт.
       - name: Контрольные суммы
-        run: sha256sum MyKids-Setup-*.exe | tee sha256.txt
+        run: sha256sum MyKids-Setup-*.exe MyKids-Server-Setup-*.exe | tee sha256.txt
         working-directory: agents/windows/dist
 
       - uses: actions/upload-artifact@v4
@@ -92,6 +113,7 @@ jobs:
           name: mykids-windows-x64
           path: |
             agents/windows/dist/MyKids-Setup-*.exe
+            agents/windows/dist/MyKids-Server-Setup-*.exe
             agents/windows/dist/sha256.txt
 
       # tag_name задан явно: при ручном запуске тега ещё нет, и действие
@@ -105,5 +127,52 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: |
             agents/windows/dist/MyKids-Setup-*.exe
+            agents/windows/dist/MyKids-Server-Setup-*.exe
             agents/windows/dist/sha256.txt
           body_path: agents/windows/RELEASE.md
+
+  # Образ сервера для NAS: готовый, чтобы семье не нужно было ни git, ни
+  # сборки, ни терминала — только вставить deploy/nas/docker-compose.yml в
+  # интерфейс NAS. Собирается в релизе, а не на каждый push: latest должен
+  # означать «последний выпуск», а не «последний коммит».
+  image:
+    name: Образ сервера
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="${INPUT_VERSION:-${REF_NAME#agent-v}}"
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) echo "release=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "release=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: steps.v.outputs.release == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # amd64 и arm64: у Synology и QNAP бывают оба. Без релиза — только
+      # сборка, чтобы поломка образа всплыла до настоящего выпуска.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/api.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ steps.v.outputs.release == 'true' }}
+          tags: |
+            ghcr.io/vdoma88/mykids-server:${{ steps.v.outputs.version || 'dev' }}
+            ghcr.io/vdoma88/mykids-server:latest
