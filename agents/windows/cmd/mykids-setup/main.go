@@ -20,6 +20,11 @@ import (
 var version = "dev"
 
 func main() {
+	// С командой программу запускает мастер установки; без команды — человек
+	// двойным щелчком, и тогда это окно установки, как раньше.
+	if isCommand(os.Args[1:]) {
+		os.Exit(runCommand(os.Args[1:]))
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		os.Exit(1)

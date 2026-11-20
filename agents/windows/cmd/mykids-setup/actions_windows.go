@@ -40,7 +40,7 @@ func elevated() bool {
 func childIsAdmin(name string) (isAdmin bool, known bool, err error) {
 	sid, _, _, err := windows.LookupSID("", name)
 	if err != nil {
-		return false, false, fmt.Errorf("учётной записи «%s» на этой машине нет", name)
+		return false, false, noAccount(name)
 	}
 	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	if err != nil {
@@ -58,6 +58,14 @@ func childIsAdmin(name string) (isAdmin bool, known bool, err error) {
 		}
 	}
 	return false, true, nil
+}
+
+// noAccount — учётной записи с таким именем нет. Отдельным типом: «нет такой»
+// и «не удалось спросить» требуют от родителя разного.
+type noAccount string
+
+func (n noAccount) Error() string {
+	return fmt.Sprintf("учётной записи «%s» на этой машине нет", string(n))
 }
 
 // copyAgent кладёт агент туда, где ребёнок его не сотрёт.

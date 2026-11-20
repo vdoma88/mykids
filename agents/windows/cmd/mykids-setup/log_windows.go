@@ -36,13 +36,25 @@ func logPath() string {
 
 func toFile(line string) {
 	logOnce.Do(func() {
-		f, err := os.Create(logPath())
+		// Дописываем, а не перезаписываем: мастер вызывает программу
+		// несколько раз за установку (проверка, остановка, привязка), и
+		// каждый вызов стирал бы отчёт предыдущего — как раз тот, который
+		// объясняет, что пошло не так. Разрастись файлу не даём.
+		flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+		if st, err := os.Stat(logPath()); err == nil && st.Size() > 1<<20 {
+			flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+		}
+		f, err := os.OpenFile(logPath(), flags, 0o600)
 		if err != nil {
 			return
 		}
 		logFile = f
-		fmt.Fprintf(f, "MyKids — установка %s, %s\n\n",
-			version, time.Now().Format("2006-01-02 15:04:05"))
+		mode := "окно"
+		if len(os.Args) > 1 {
+			mode = "команда " + os.Args[1]
+		}
+		fmt.Fprintf(f, "\nMyKids — установка %s, %s, %s\n\n",
+			version, time.Now().Format("2006-01-02 15:04:05"), mode)
 	})
 	logMu.Lock()
 	defer logMu.Unlock()

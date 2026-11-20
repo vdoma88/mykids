@@ -180,3 +180,34 @@ func Blocking(ps []Problem) bool {
 	}
 	return false
 }
+
+// Binding — нынешняя привязка компьютера, если она есть.
+type Binding struct {
+	Server   string
+	Token    string
+	ChildURL string
+}
+
+// Resolve — что на самом деле ставить: введённое плюс нынешняя привязка.
+// Второе значение — оставлена ли прежняя привязка.
+//
+// Пустой токен при уже привязанном компьютере значит «оставить привязку»: так
+// идёт обновление поверх, и требовать новый токен на каждую версию — значит
+// заставлять родителя каждый раз идти в админку. Адрес при этом можно
+// поменять: сервер переехал на другой IP, а токен тот же — частый случай в
+// домашней сети, и переустанавливать ради него всё было бы нелепо.
+func Resolve(in Input, b *Binding) (Input, bool) {
+	if strings.TrimSpace(in.Token) != "" || b == nil || b.Server == "" || b.Token == "" {
+		return Normalize(in), false
+	}
+	in.Token = b.Token
+	if strings.TrimSpace(in.Server) == "" {
+		in.Server = b.Server
+	}
+	// Свой адрес заданий сохраняем, только если сервер тот же: при переезде
+	// старый адрес почти наверняка тоже устарел.
+	if strings.TrimSpace(in.ChildURL) == "" && Normalize(in).Server == strings.TrimRight(b.Server, "/") {
+		in.ChildURL = b.ChildURL
+	}
+	return Normalize(in), true
+}

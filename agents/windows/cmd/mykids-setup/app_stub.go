@@ -8,3 +8,7 @@ import "fmt"
 func run() error {
 	return fmt.Errorf("установщик MyKids работает только в Windows")
 }
+
+func dispatch(string, cliArgs, *report) (int, error) { return exitStop, errNotWindows }
+
+func toFile(string) {}

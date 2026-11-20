@@ -209,13 +209,20 @@ jobs:
       - name: Служба и помощник вместе
         run: ./two-process-test.sh
 
+      # Установщик — на каждый push, а не только в релизе: makensis с -WX
+      # падает на любом предупреждении, и узнать об этом в день релиза поздно.
+      - name: Установщик
+        working-directory: .
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq nsis
+          VERSION=0.0.0 deploy/build-installer.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: mykids-windows-x64
           path: |
-            agents/windows/dist/mykids-agent.exe
-            agents/windows/dist/mykids-check.exe
-            agents/windows/dist/mykids-setup.exe
+            agents/windows/dist/MyKids-Setup-0.0.0.exe
 
   legacy:
     name: Браузерные тесты

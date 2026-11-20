@@ -10,17 +10,37 @@ import { deviceHealth } from '../Children.js';
 
 type Platform = 'windows' | 'android' | 'web';
 const PLATFORM_ICON: Record<string, IconName> = { windows: 'monitor', android: 'phone', web: 'globe' };
+/** Последний релиз: установщик лежит там, а номер версии в ссылке устарел бы. */
+const RELEASES_URL = 'https://github.com/vdoma88/mykids/releases/latest';
 
 /** Что делать с токеном дальше — у каждой платформы своё. */
 function NextSteps({ platform }: { platform: Platform }): JSX.Element {
   const childUrl = `${window.location.origin}/child`;
   if (platform === 'windows') {
+    // Свой сервер родитель часто открывает как localhost — и переносит этот
+    // адрес в установщик, где он означает сам компьютер ребёнка. Мастер это
+    // поймает, но сказать заранее дешевле, чем отказ на середине установки.
+    const local = /^(localhost|127\.|\[?::1\]?$)/.test(window.location.hostname);
     return (
-      <ol className="small" style={{ margin: 0, paddingLeft: 18 }}>
-        <li>На компьютере ребёнка запустите «MyKids Setup» от имени администратора.</li>
-        <li>Впишите адрес сервера <span className="mono">{window.location.origin}</span>, этот токен и имя учётной записи ребёнка.</li>
-        <li>Проверьте из учётной записи ребёнка через «MyKids Check».</li>
-      </ol>
+      <>
+        <ol className="small" style={{ margin: 0, paddingLeft: 18 }}>
+          <li>
+            На компьютере ребёнка, из своей учётной записи, скачайте и запустите установщик{' '}
+            <a href={RELEASES_URL} target="_blank" rel="noreferrer">MyKids-Setup</a>.
+          </li>
+          <li>
+            Впишите адрес сервера{local ? '' : <> <span className="mono">{window.location.origin}</span></>}, этот токен
+            и выберите учётную запись ребёнка. Мастер спросит сервер и покажет, чей это токен.
+          </li>
+          <li>Войдите в учётную запись ребёнка: в трее — значок с остатком времени, на рабочем столе — «Задания MyKids».</li>
+        </ol>
+        {local && (
+          <Alert tone="warning">
+            Вы открыли админку как <span className="mono">{window.location.hostname}</span> — на компьютере ребёнка этот адрес
+            означает его самого. Впишите адрес этой машины в домашней сети, например <span className="mono">http://192.168.1.10:{window.location.port || '3000'}</span>.
+          </Alert>
+        )}
+      </>
     );
   }
   if (platform === 'web') {
