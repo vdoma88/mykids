@@ -10,9 +10,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Обход локальной группы: в x/sys/windows его нет, а знать состав
-// администраторов установщику необходимо. Это единственное условие, без
-// которого вся остальная установка бессмысленна.
+// Обход локальной группы: в x/sys/windows его нет, а установщику нужны две:
+// администраторы — ребёнок не должен в них состоять, это единственное
+// условие, без которого вся остальная установка бессмысленна, — и
+// пользователи, из которых мастер предлагает выбрать учётную запись ребёнка.
 
 var (
 	netapi32                    = windows.NewLazySystemDLL("netapi32.dll")
@@ -36,7 +37,7 @@ type localGroupMembersInfo0 struct {
 func groupMembers(group *windows.SID) ([]*windows.SID, error) {
 	name, _, _, err := group.LookupAccount("")
 	if err != nil {
-		return nil, fmt.Errorf("имя группы администраторов: %w", err)
+		return nil, fmt.Errorf("имя локальной группы: %w", err)
 	}
 	wname, err := windows.UTF16PtrFromString(name)
 	if err != nil {

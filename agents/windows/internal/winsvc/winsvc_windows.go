@@ -304,3 +304,30 @@ func StateName(s svc.State) string {
 		return fmt.Sprintf("состояние %d", s)
 	}
 }
+
+// State — состояние службы без перевода; installed ложно, если её нет.
+//
+// Установщику нужно отличать «нет службы» от «не удалось спросить»: первое —
+// обычное дело при первой установке, второе — повод остановиться.
+func State() (state svc.State, installed bool, err error) {
+	m, err := mgr.Connect()
+	if err != nil {
+		return 0, false, fmt.Errorf("диспетчер служб (нужны права администратора): %w", err)
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(Name)
+	if err != nil {
+		if errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST) {
+			return 0, false, nil
+		}
+		return 0, false, fmt.Errorf("служба %s: %w", Name, err)
+	}
+	defer s.Close()
+
+	status, err := s.Query()
+	if err != nil {
+		return 0, true, err
+	}
+	return status.State, true, nil
+}

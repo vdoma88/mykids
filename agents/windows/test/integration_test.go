@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/vdoma88/mykids/agents/windows/internal/link"
 	"github.com/vdoma88/mykids/agents/windows/internal/outbox"
 	"github.com/vdoma88/mykids/agents/windows/internal/policy"
+	"github.com/vdoma88/mykids/agents/windows/internal/setup"
 )
 
 const version = "test"
@@ -389,5 +391,31 @@ func TestRevokedTokenIsUnauthorized(t *testing.T) {
 	}
 	if client.IsOffline(err) {
 		t.Fatalf("отказ в доступе принят за офлайн: %v", err)
+	}
+}
+
+// Мастер установки спрашивает сервер, чей это токен, до того как что-то
+// тронуть. Здесь видно, что настоящий сервер отвечает именно так, как мастер
+// ждёт: имя ребёнка на верный токен и отказ — на чужой.
+func TestInstallerVerifiesTokenAgainstServer(t *testing.T) {
+	in := setup.Normalize(setup.Input{Server: env(t, "MYKIDS_SERVER"), Token: env(t, "MYKIDS_DEVICE_TOKEN")})
+	v, p := setup.VerifyToken(ctx(t), http.DefaultClient, in)
+	if p != nil {
+		t.Fatalf("верный токен не принят: %+v", p)
+	}
+	if v.Child != "Марк" {
+		t.Errorf("имя ребёнка: %q, ожидалось «Марк» из integration.sh", v.Child)
+	}
+
+	in.Token = "заведомо-неизвестный-токен"
+	_, p = setup.VerifyToken(ctx(t), http.DefaultClient, in)
+	if p == nil || p.Field != setup.FieldToken {
+		t.Fatalf("чужой токен должен указывать на поле токена: %+v", p)
+	}
+
+	// Адрес без схемы — так его вводит родитель, а мастер дописывает сам.
+	bare := setup.Normalize(setup.Input{Server: strings.TrimPrefix(env(t, "MYKIDS_SERVER"), "http://"), Token: env(t, "MYKIDS_DEVICE_TOKEN")})
+	if _, p := setup.VerifyToken(ctx(t), http.DefaultClient, bare); p != nil {
+		t.Fatalf("адрес без схемы не сработал: %+v", p)
 	}
 }

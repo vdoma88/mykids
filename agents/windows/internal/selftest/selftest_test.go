@@ -154,7 +154,7 @@ func TestMissingServiceIsNotAFailure(t *testing.T) {
 	if r.Status != Warn {
 		t.Fatalf("отсутствие службы показано как %s", r.Status)
 	}
-	if !strings.Contains(r.Hint, "install-windows.ps1") {
+	if !strings.Contains(r.Hint, "MyKids-Setup") {
 		t.Fatalf("не сказано, чем её поставить: %q", r.Hint)
 	}
 }

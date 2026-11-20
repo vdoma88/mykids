@@ -229,3 +229,46 @@ func TestDoneNamesTheAddressToOpen(t *testing.T) {
 		t.Fatalf("не предложено проверить установку: %q", lines)
 	}
 }
+
+func TestResolveKeepsBindingWhenTokenEmpty(t *testing.T) {
+	b := &Binding{Server: "http://192.168.1.10:3000", Token: "old", ChildURL: "http://192.168.1.10:5174/child"}
+
+	in, kept := Resolve(Input{ChildUser: "Маша"}, b)
+	if !kept || in.Token != "old" || in.Server != b.Server || in.ChildURL != b.ChildURL {
+		t.Fatalf("обновление должно сохранить привязку целиком: %+v kept=%v", in, kept)
+	}
+
+	// Тот же сервер, введённый без схемы, — всё ещё тот же сервер.
+	in, _ = Resolve(Input{Server: "192.168.1.10:3000"}, b)
+	if in.ChildURL != b.ChildURL {
+		t.Errorf("свой адрес заданий потерян: %q", in.ChildURL)
+	}
+}
+
+func TestResolveMovedServerKeepsTokenButNotChildURL(t *testing.T) {
+	b := &Binding{Server: "http://192.168.1.10:3000", Token: "old", ChildURL: "http://192.168.1.10:5174/child"}
+	in, kept := Resolve(Input{Server: "http://192.168.1.20:3000"}, b)
+	if !kept || in.Token != "old" {
+		t.Fatalf("токен при переезде сервера должен сохраниться: %+v", in)
+	}
+	if in.ChildURL != "http://192.168.1.20:3000/child" {
+		t.Errorf("адрес заданий должен уйти за сервером: %q", in.ChildURL)
+	}
+}
+
+func TestResolveNewTokenReplacesBinding(t *testing.T) {
+	b := &Binding{Server: "http://192.168.1.10:3000", Token: "old"}
+	in, kept := Resolve(Input{Server: "http://192.168.1.10:3000", Token: " new "}, b)
+	if kept || in.Token != "new" {
+		t.Fatalf("новый токен должен заменить прежний: %+v kept=%v", in, kept)
+	}
+}
+
+func TestResolveWithoutBindingIsPlainNormalize(t *testing.T) {
+	for _, b := range []*Binding{nil, {Server: "http://x:3000"}} {
+		in, kept := Resolve(Input{Server: "x:3000"}, b)
+		if kept || in.Token != "" || in.Server != "http://x:3000" {
+			t.Errorf("без полной привязки нечего сохранять: %+v kept=%v", in, kept)
+		}
+	}
+}
