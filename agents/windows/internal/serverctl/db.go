@@ -98,9 +98,17 @@ func (d DB) Start(ctx context.Context) error {
 	if err := os.MkdirAll(d.L.Logs(), 0o755); err != nil {
 		return err
 	}
+	logPath := filepath.Join(d.L.Logs(), "postgres.log")
 	_, err := d.run(ctx, "pg_ctl", "start", "-D", d.L.PgData(), "-w", "-t", "120",
-		"-l", filepath.Join(d.L.Logs(), "postgres.log"),
-		"-o", "-p "+strconv.Itoa(d.C.DBPort)+" -c listen_addresses=127.0.0.1")
+		"-l", logPath,
+		"-o", "-p "+strconv.Itoa(d.C.DBPort)+" -c listen_addresses=127.0.0.1"+socketOption)
+	if err != nil {
+		// «Examine the log output» от pg_ctl ничего не говорит тому, кто
+		// читает отчёт: причина — в журнале базы, и показать надо её.
+		if raw, rerr := os.ReadFile(logPath); rerr == nil {
+			return fmt.Errorf("%w\n%s", err, lastLines(string(raw), 5))
+		}
+	}
 	return err
 }
 

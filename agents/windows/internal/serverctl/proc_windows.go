@@ -16,6 +16,9 @@ func hide(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 }
 
+// socketOption — в Windows PostgreSQL по умолчанию и так слушает только TCP.
+const socketOption = ""
+
 // terminate — в Windows мягко остановить чужую консольную программу без
 // консоли нечем; API от этого ничего не теряет: всё, что важно, он хранит в
 // базе, а база останавливается своим порядком.
